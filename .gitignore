@@ -1,0 +1,32 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build
+
+# env
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+.vscode
+.idea
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# sandbox 잔재 (수동 삭제 시 macOS에서 정상 삭제됨)
+.tmp_typecheck/

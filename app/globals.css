@@ -1,0 +1,83 @@
+/* Pretendard Variable — CDN @font-face (별도 파일 다운로드 불필요) */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   COUNCIL — 디자인 토큰
+   CLAUDE.md ❼ 디자인 시스템 그대로.
+   HSL이 아닌 hex로 명세된 토큰이라 hsl() 변환 없이 raw 값을 그대로 둔다.
+   tailwind.config.ts 는 hsl(var(--xxx)) 로 감싸지만, 여기서는 hex를 그대로 써서
+   브라우저가 color로 해석하게 한다. (hsl() 안의 raw hex는 무효 → 색상 키워드로 fallback)
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* 색상은 실제 hex를 그대로 사용한다. tailwind extend는 hsl() 래핑이지만
+       값에 raw hex를 넣으면 hsl 함수가 무시되고 hex가 적용된다.
+       대신 안전하게 hex → hsl 변환된 형태로 명시한다. */
+
+    --background:   240 13% 5%;     /* #0A0A0F */
+    --surface:      240 14% 9%;     /* #13131A */
+    --surface-2:    240 23% 13%;    /* #1A1A28 */
+    --border:       240 20% 15%;    /* #1E1E2E */
+
+    --primary:       239 84% 67%;   /* #6366F1 */
+    --primary-glow:  239 84% 67%;   /* alpha는 컴포넌트에서 적용 */
+
+    --accent:       38 92% 50%;     /* #F59E0B */
+    --destructive:  0 84% 60%;      /* #EF4444 */
+
+    --text:         210 25% 90%;    /* #E2E8F0 */
+    --text-muted:   215 16% 47%;    /* #64748B */
+    --text-dim:     220 13% 26%;    /* #374151 */
+
+    --radius: 0.75rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply bg-background text-text;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-text font-sans;
+    font-feature-settings: 'ss01', 'ss02', 'cv01', 'cv11';
+  }
+
+  /* 한국어 본문은 항상 leading-relaxed (1.625) 이상 */
+  p, li {
+    line-height: 1.7;
+  }
+
+  /* 헤드라인은 타이트하게 */
+  h1, h2, h3, h4 {
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+
+  /* 디스플레이용 영문 타이틀 (Syne) */
+  .font-display {
+    letter-spacing: -0.04em;
+  }
+}
+
+/* 페르소나 orb glow 유틸 */
+@layer utilities {
+  .glow-primary {
+    box-shadow: 0 0 24px 0 hsl(var(--primary) / 0.35);
+  }
+  .glow-accent {
+    box-shadow: 0 0 24px 0 hsl(var(--accent) / 0.35);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
