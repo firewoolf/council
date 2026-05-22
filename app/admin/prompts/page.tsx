@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Lock } from 'lucide-react';
+import { ArrowLeft, Lock, Pencil } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
+import { isEditEnabled } from '@/lib/admin/github';
 import { BASE_PROMPT, OUTPUT_HINT } from '@/lib/prompts/base';
 
 export const dynamic = 'force-dynamic';
@@ -27,16 +28,25 @@ export default function AdminPromptsPage() {
         </Link>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">공통 프롬프트</h1>
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
-            <Lock className="size-3" /> 읽기 전용
-          </span>
+          {isEditEnabled() ? (
+            <Link
+              href="/admin/prompts/edit"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              <Pencil className="size-3.5" />
+              편집
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
+              <Lock className="size-3" /> 읽기 전용
+            </span>
+          )}
         </div>
         <p className="text-xs leading-relaxed text-text-muted">
           모든 페르소나에 공통 적용됩니다.{' '}
-          <code className="rounded bg-surface-2 px-1 font-mono text-[11px]">
-            data/prompts.json
-          </code>{' '}
-          을 직접 수정하여 push 하면 자동 배포됩니다.
+          {isEditEnabled()
+            ? '편집 시 GitHub commit이 발생하고 Vercel이 자동 재배포합니다.'
+            : 'GITHUB_TOKEN, GITHUB_REPO 환경변수 설정 후 편집 가능합니다.'}
         </p>
       </div>
 

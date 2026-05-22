@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Lock, Pencil } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
+import { isEditEnabled } from '@/lib/admin/github';
 import { PERSONAS } from '@/lib/prompts/personas';
 
 export const dynamic = 'force-dynamic';
@@ -28,16 +29,20 @@ export default function AdminPersonasPage() {
         </Link>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">페르소나 ({PERSONAS.length})</h1>
-          <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
-            <Lock className="size-3" /> 읽기 전용
-          </span>
+          {isEditEnabled() ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+              <Pencil className="size-3" /> 편집 가능
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
+              <Lock className="size-3" /> 읽기 전용
+            </span>
+          )}
         </div>
         <p className="text-xs text-text-muted">
-          편집 기능은 Phase 3에서 활성화됩니다. 지금은{' '}
-          <code className="rounded bg-surface-2 px-1 font-mono text-[11px]">
-            data/personas.json
-          </code>{' '}
-          파일을 직접 수정한 뒤 push 하면 자동 배포됩니다.
+          {isEditEnabled()
+            ? '항목을 눌러 상세 보기 → 편집 버튼으로 진입하세요. 저장 시 GitHub commit + Vercel 자동 재배포.'
+            : 'GITHUB_TOKEN, GITHUB_REPO 환경변수가 설정되면 편집이 활성화됩니다.'}
         </p>
       </div>
 

@@ -1,9 +1,10 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Pencil } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
+import { isEditEnabled } from '@/lib/admin/github';
 import { PERSONA_MAP, composePersonaPrompt } from '@/lib/prompts/personas';
 
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,15 @@ export default function AdminPersonaDetailPage({ params }: Props) {
             {persona.dynamic && ' · dynamic'}
           </p>
         </div>
+        {isEditEnabled() && (
+          <Link
+            href={`/admin/personas/${persona.id}/edit`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+          >
+            <Pencil className="size-3.5" />
+            편집
+          </Link>
+        )}
       </header>
 
       {/* 메타 */}
