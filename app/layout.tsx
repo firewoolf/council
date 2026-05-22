@@ -26,9 +26,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'COUNCIL — 내 고민을 들고 들어가면, 전문가들이 싸워준다',
+  title: 'COUNCIL — 전문가 패널과 함께 만드는 결론',
   description:
-    '혼자 결정해야 하는 창업자/1인 개발자를 위한 AI 전문가 패널. 사용자가 감독, AI가 배우.',
+    '냉정한 투자자, 독설가 개발자, 잡스형 디자이너 — 그리고 레전드들까지. 서로 다른 시각이 충돌하며 가장 단단한 결론으로 수렴합니다. 아부 대신, 팩트와 직설로.',
 };
 
 export const viewport: Viewport = {

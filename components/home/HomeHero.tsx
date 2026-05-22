@@ -28,13 +28,14 @@ export function HomeHero() {
     <section className="flex flex-col gap-8 pt-6 sm:pt-12">
       <div className="space-y-4">
         <h1 className="font-sans text-4xl font-black leading-[1.1] tracking-tight text-text sm:text-6xl">
-          내 고민을 들고 들어가면,
+          가장 단단한 결론은,
           <br />
-          <span className="text-primary">전문가들이 싸워준다.</span>
+          <span className="text-primary">서로 다른 시각의 충돌에서 나옵니다.</span>
         </h1>
         <p className="max-w-prose text-base leading-relaxed text-text-muted sm:text-lg">
-          혼자 결정해야 하는 순간, AI 전문가 패널이 서로 반박하며 토론합니다.
-          당신은 감독, AI는 배우입니다. "맞습니다 대표님"은 시스템에서 금지되었습니다.
+          냉정한 투자자, 독설가 개발자, 잡스형 디자이너 — 그리고 당신이 부르는 레전드까지.
+          전문가 패널이 서로 다른 관점으로 당신의 고민을 검증하고 결론을 함께 만듭니다.
+          아부 대신, 팩트와 직설로.
         </p>
       </div>
 
