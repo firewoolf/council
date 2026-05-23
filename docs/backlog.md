@@ -7,7 +7,11 @@
 
 ## Active
 
-(현재 active 항목 없음)
+### E-1. ADMIN_PASSWORD 미설정 시 /admin 진입 UX
+- **배경**: ADMIN_PASSWORD 환경변수가 없는데도 `/admin` URL을 직접 입력하면 미들웨어가 `/admin/login` 으로 리다이렉트 → 로그인 폼이 보임. 폼에 비밀번호 입력해도 503 ("어드민 기능이 비활성화") 응답.
+- **개선안**: `/admin/login` 페이지에서 `isAdminEnabled()` 확인 후, 비활성화 상태면 "ADMIN_PASSWORD 환경변수가 설정되지 않았습니다" 안내 카드 표시 (현재 `/admin` 페이지가 해주는 동작과 동일).
+- **위험도**: 낮음 — 운영자 본인만 발견. 일반 사용자는 푸터 링크가 안 보이므로 `/admin` 진입 안 함.
+- **참고**: `app/admin/login/page.tsx` 의 LoginShell 위에 `isAdminEnabled()` 가드 한 줄로 처리 가능.
 
 ---
 
