@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { DebateStatus } from '@/components/debate/DebateControls';
 import { generateConclusion, generateSpeech } from '@/lib/ai/client';
-import {
-  listAvailableProviders,
-  pickProvider,
-} from '@/lib/ai/providers';
+import { runWithFallback } from '@/lib/ai/runWithFallback';
 import {
   buildDebateContext,
   decideNextSpeaker,
@@ -168,25 +165,19 @@ export function useDebate(sessionId: string): UseDebateReturn {
           PERSONA_MAP,
         );
 
-        // 호출 시점에 'debate' role 적합 공급사 선택 (Groq > Cerebras > … > 폴백)
-        const liveState = useApiKeyStore.getState();
-        const available = listAvailableProviders(liveState.keys);
-        const debateProvider = pickProvider('debate', available);
-        const debateKey = debateProvider ? liveState.keys[debateProvider] : null;
-        if (!debateProvider || !debateKey) {
-          if (!cancelled) {
-            setError('등록된 API 키가 없습니다.');
-            setStatus('error');
-          }
-          return;
-        }
-
-        const speech = await generateSpeech({
-          provider: debateProvider,
-          apiKey: debateKey,
-          system: systemPrompt,
-          prompt: userPrompt,
-        });
+        // Phase B+C: 'debate' 적합 공급사로 시도, quota 시 다른 공급사로 자동 폴백
+        const liveKeys = useApiKeyStore.getState().keys;
+        const speech = await runWithFallback(
+          'debate',
+          liveKeys,
+          (provider, apiKey) =>
+            generateSpeech({
+              provider,
+              apiKey,
+              system: systemPrompt,
+              prompt: userPrompt,
+            }),
+        );
 
         if (cancelled) return;
 
@@ -254,28 +245,20 @@ export function useDebate(sessionId: string): UseDebateReturn {
     const handle = setTimeout(async () => {
       if (cancelled) return;
       try {
-        // 결론은 'conclude' role 적합 공급사 (Gemini > 폴백)
-        const liveState = useApiKeyStore.getState();
-        const available = listAvailableProviders(liveState.keys);
-        const concludeProvider = pickProvider('conclude', available);
-        const concludeKey = concludeProvider
-          ? liveState.keys[concludeProvider]
-          : null;
-        if (!concludeProvider || !concludeKey) {
-          if (!cancelled) {
-            setError('등록된 API 키가 없습니다.');
-            setStatus('error');
-          }
-          return;
-        }
-
-        const result = await generateConclusion({
-          provider: concludeProvider,
-          apiKey: concludeKey,
-          concern: session.concern,
-          messages: safeMessages,
-          personaMap: PERSONA_MAP,
-        });
+        // Phase B+C: 'conclude' 적합 공급사로 시도, quota 시 다른 공급사로 자동 폴백
+        const liveKeys = useApiKeyStore.getState().keys;
+        const result = await runWithFallback(
+          'conclude',
+          liveKeys,
+          (provider, apiKey) =>
+            generateConclusion({
+              provider,
+              apiKey,
+              concern: session.concern,
+              messages: safeMessages,
+              personaMap: PERSONA_MAP,
+            }),
+        );
         if (cancelled) return;
         saveConclusion(sessionId, result);
         setStatus('concluded');

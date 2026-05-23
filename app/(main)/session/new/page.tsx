@@ -14,9 +14,9 @@ import { AiCallError } from '@/lib/ai/errors';
 import {
   BYOK_PROVIDERS,
   listAvailableProviders,
-  pickProvider,
   type AiProvider,
 } from '@/lib/ai/providers';
+import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
@@ -58,12 +58,8 @@ export default function NewSessionPage() {
   const handleAnalyze = useCallback(
     async (text: string): Promise<void> => {
       const state = useApiKeyStore.getState();
-      // Phase B 라우팅: 추천에는 'recommend' role 적합 공급사 (대개 gemini).
-      // 사용자가 등록한 키들 중에서만 고른다. 키 1개면 그 1개로 동작.
       const available = listAvailableProviders(state.keys);
-      const currentProvider = pickProvider('recommend', available);
-      const currentKey = currentProvider ? state.keys[currentProvider] : null;
-      if (!currentProvider || !currentKey) {
+      if (available.length === 0) {
         toast.error('API 키가 필요합니다. 설정 페이지에서 먼저 등록해주세요.');
         return;
       }
@@ -71,11 +67,16 @@ export default function NewSessionPage() {
       setStep('analyzing');
 
       try {
-        const result = await recommendPersonas({
-          provider: currentProvider,
-          apiKey: currentKey,
-          concern: text,
-        });
+        // Phase B 라우팅 + Phase C 자동 폴백:
+        // 'recommend' 적합 공급사로 시도 → quota면 다른 공급사로 1회 재시도.
+        const result = await runWithFallback(
+          'recommend',
+          state.keys,
+          (provider, apiKey) =>
+            recommendPersonas({ provider, apiKey, concern: text }),
+        );
+        // 폴백이 발생했어도 사용자 경험상 마지막 성공한 공급사로 전환되는 게 자연스러움
+        // 단, 이 정보는 토스트 액션 흐름에서만 알려주고 강제 전환은 하지 않음.
 
         const recIds = result.recommended.map((r) => r.personaId);
         const reasonMap = Object.fromEntries(
@@ -93,16 +94,17 @@ export default function NewSessionPage() {
       } catch (err) {
         setStep('input');
         if (err instanceof AiCallError) {
-          // fallback 후보: 다른 BYOK 공급사 중 키 등록된 첫 번째
+          // Phase C 자동 폴백 후에도 실패한 경우 = 모든 BYOK 공급사가 막힘.
+          // err.provider 는 마지막으로 실패한 공급사. 그 외 등록된 키 중에
+          // 토론에선 안 써본 공급사가 있으면 사용자 동의 후 전환 토스트로 안내.
           const altProvider: AiProvider | null =
             BYOK_PROVIDERS.find(
-              (p) => p !== currentProvider && !!state.keys[p],
+              (p) => p !== err.provider && !!state.keys[p],
             ) ?? null;
           showAiError(err, {
             alternateProvider: altProvider,
             onSwitch: (target) => {
               setProvider(target);
-              // setProvider 즉시 반영 → 다음 줄 getState 로 새 값 읽음
               void handleAnalyze(text);
             },
           });

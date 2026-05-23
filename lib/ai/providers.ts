@@ -87,10 +87,12 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     displayName: 'OpenRouter (무료 모델)',
     signupUrl: 'https://openrouter.ai/keys',
     signupGuide:
-      'OpenRouter 가입 → Keys → "Create Key" (GitHub/Google 로그인). 키 복사 후 입력 (30초).',
-    // 무료 모델은 자주 바뀐다 — https://openrouter.ai/models?fmt=cards&q=:free 에서 최신 확인.
-    // 현재 시점 안정적 후보: Llama 3.3 70B Instruct (:free) — 한국어 OK, JSON schema 준수도 양호.
-    modelId: 'meta-llama/llama-3.3-70b-instruct:free',
+      'OpenRouter 가입 → Keys → "Create Key" → 키 복사. ⚠️ 반드시 Settings → Privacy 에서 무료 모델 사용(데이터 정책)을 허용해야 합니다 — 안 하면 무료 모델이 404로 거부됩니다.',
+    // openrouter/free 는 2026.2 출시된 "무료 모델 라우터".
+    // 요청에 필요한 기능(구조화 출력/tool calling)을 지원하는 무료 모델만
+    // 자동 필터링해서 골라준다 → 개별 :free 슬러그가 폐기돼도 안 깨짐.
+    // 개별 모델을 박으면 그 모델이 구조화 출력 미지원일 때 generateObject 가 실패한다.
+    modelId: 'openrouter/free',
     // sk-or-v1- 접두사 + 64자 hex 정도
     keyPattern: /^sk-or-v1-[A-Za-z0-9]{40,}$/,
     browserDirect: true,
@@ -105,15 +107,17 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     signupUrl: 'https://cloud.cerebras.ai',
     signupGuide:
       'Cerebras Cloud 가입 → API Keys → "Create Key" → 복사 (30초). 무료 계정 즉시 발급.',
-    // Cerebras 공식 docs 기준 stable 모델. 한국어/구조화 출력 모두 양호.
-    modelId: 'llama-3.3-70b',
+    // Cerebras 공식 카탈로그 production 모델은 llama3.1-8b(2026-05-27 폐기 예정)
+    // 와 gpt-oss-120b 둘뿐. gpt-oss-120b 는 구조화 출력(tool calling) 네이티브 지원.
+    // 'llama-3.3-70b' 는 Cerebras 에 존재하지 않는 ID (Groq 네이밍과 혼동된 것).
+    modelId: 'gpt-oss-120b',
     // csk- 접두사 추정. 실제 키 형식이 다르면 빌드 후 §6 검증 단계에서 정정.
     keyPattern: /^csk-[A-Za-z0-9]{20,}$/,
     // 워크오더 §6: CORS 실측 필요. SDK docs 기준 브라우저 호출 지원으로 표기하지만,
     // 실제 배포 후 네트워크 탭에서 확인 후 false 로 토글할 수 있음.
     browserDirect: true,
     accent: { from: '#0F766E', to: '#5EEAD4' },
-    freeTier: '분당 6만 토큰 / 일 약 1700회 (Llama 3.3 70B 기준)',
+    freeTier: '일 100만 토큰 무료 (gpt-oss-120b · 고수요 시 한도 일시 축소)',
     // Cerebras: 초고속 추론 → 토론 발언 (대안 debate provider)
     roles: ['debate'],
   },
