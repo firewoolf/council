@@ -7,17 +7,18 @@
 
 ## Active
 
-### E-1. ADMIN_PASSWORD 미설정 시 /admin 진입 UX
-- **배경**: ADMIN_PASSWORD 환경변수가 없는데도 `/admin` URL을 직접 입력하면 미들웨어가 `/admin/login` 으로 리다이렉트 → 로그인 폼이 보임. 폼에 비밀번호 입력해도 503 ("어드민 기능이 비활성화") 응답.
-- **개선안**: `/admin/login` 페이지에서 `isAdminEnabled()` 확인 후, 비활성화 상태면 "ADMIN_PASSWORD 환경변수가 설정되지 않았습니다" 안내 카드 표시 (현재 `/admin` 페이지가 해주는 동작과 동일).
-- **위험도**: 낮음 — 운영자 본인만 발견. 일반 사용자는 푸터 링크가 안 보이므로 `/admin` 진입 안 함.
-- **참고**: `app/admin/login/page.tsx` 의 LoginShell 위에 `isAdminEnabled()` 가드 한 줄로 처리 가능.
+(현재 active 항목 없음)
 
 ---
 
 ## Done
 
-### D-1. Session.aiProvider 동기화 (commit 현재) — 옵션 (I) 채택
+### E-1. ADMIN_PASSWORD 미설정 시 /admin/login 안내 (commit 현재)
+- ✅ `app/admin/login/page.tsx` 를 server component 로 변환 + 비활성 상태면 안내 카드, 활성이면 client `LoginFormBoundary` 렌더.
+- ✅ `LoginForm + LoginShell` 을 `LoginForm.tsx` 로 분리. 'use client' 격리.
+- 효과: ADMIN_PASSWORD 없는 환경에서 `/admin` 직접 접근 시 빈 폼 대신 명시적 비활성 안내 + GITHUB_TOKEN/REPO 함께 설정 가이드.
+
+### D-1. Session.aiProvider 동기화 (commit 3efccdf) — 옵션 (I) 채택
 - ✅ `store/sessions.ts` 에 `updateSessionProvider(id, provider)` 추가. 기존 값과 같으면 no-op (zustand persist write 안 일어남).
 - ✅ `runWithFallback` 반환에 `usedProvider` 포함 (`RunWithFallbackResult<T>`). 호출자가 실제 성공한 공급사를 정확히 알 수 있게.
 - ✅ useDebate 가 generateSpeech / generateConclusion 성공 직후 `updateSessionProvider(sessionId, usedProvider)`.
