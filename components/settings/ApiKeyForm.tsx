@@ -96,6 +96,18 @@ interface ProviderCardProps {
   onSwitchProvider: (target: AiProvider) => void;
 }
 
+/**
+ * 공급사별 키 placeholder / 형식 힌트.
+ * 새 공급사 추가 시 여기 한 줄만 채우면 카드 UX가 자동으로 따라온다.
+ */
+const KEY_HINTS: Record<AiProvider, { placeholder: string; prefix: string }> = {
+  gemini: { placeholder: 'AIzaSy...', prefix: 'AIzaSy' },
+  groq: { placeholder: 'gsk_...', prefix: 'gsk_' },
+  openrouter: { placeholder: 'sk-or-v1-...', prefix: 'sk-or-v1-' },
+  cerebras: { placeholder: 'csk-...', prefix: 'csk-' },
+  claude: { placeholder: 'sk-ant-...', prefix: 'sk-ant-' },
+};
+
 function ProviderCard({
   provider,
   selected,
@@ -109,6 +121,7 @@ function ProviderCard({
   onSwitchProvider,
 }: ProviderCardProps) {
   const config = PROVIDERS[provider];
+  const hints = KEY_HINTS[provider];
   const [draft, setDraft] = useState(savedKey);
   const [testing, setTesting] = useState(false);
 
@@ -199,9 +212,7 @@ function ProviderCard({
             type="password"
             autoComplete="off"
             spellCheck={false}
-            placeholder={
-              provider === 'gemini' ? 'AIzaSy...' : 'gsk_...'
-            }
+            placeholder={hints.placeholder}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             className={cn(
@@ -246,7 +257,7 @@ function ProviderCard({
 
         {draft.length > 0 && !formatOk && (
           <p className="text-xs text-destructive">
-            키 형식이 맞지 않습니다. ({provider === 'gemini' ? 'AIzaSy로 시작' : 'gsk_로 시작'})
+            키 형식이 맞지 않습니다. ({hints.prefix}로 시작)
           </p>
         )}
         {hasKey && testedAt && !dirty && (

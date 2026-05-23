@@ -30,7 +30,7 @@ export interface Database {
           title: string;
           concern: string;
           status: 'active' | 'concluded';
-          ai_provider: 'gemini' | 'groq' | 'claude';
+          ai_provider: 'gemini' | 'groq' | 'openrouter' | 'cerebras' | 'claude';
           domain: string | null;
           created_at: string;
         };
@@ -41,7 +41,7 @@ export interface Database {
           title: string;
           concern: string;
           status?: 'active' | 'concluded';
-          ai_provider?: 'gemini' | 'groq' | 'claude';
+          ai_provider?: 'gemini' | 'groq' | 'openrouter' | 'cerebras' | 'claude';
           domain?: string | null;
           created_at?: string;
         };

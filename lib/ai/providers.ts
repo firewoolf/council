@@ -8,7 +8,12 @@
  * BYOK 흐름은 2단계 기준. Anthropic은 CORS 불가라 BYOK 불가능 → 서버 전용.
  */
 
-export type AiProvider = 'gemini' | 'groq' | 'claude';
+export type AiProvider =
+  | 'gemini'
+  | 'groq'
+  | 'openrouter'
+  | 'cerebras'
+  | 'claude';
 
 export interface ProviderConfig {
   id: AiProvider;
@@ -58,6 +63,37 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     accent: { from: '#F55036', to: '#FF8A65' },
     freeTier: '분당 30회 / 일 14400회 무료 (Llama 3.3 70B 기준)',
   },
+  openrouter: {
+    id: 'openrouter',
+    displayName: 'OpenRouter (무료 모델)',
+    signupUrl: 'https://openrouter.ai/keys',
+    signupGuide:
+      'OpenRouter 가입 → Keys → "Create Key" (GitHub/Google 로그인). 키 복사 후 입력 (30초).',
+    // 무료 모델은 자주 바뀐다 — https://openrouter.ai/models?fmt=cards&q=:free 에서 최신 확인.
+    // 현재 시점 안정적 후보: Llama 3.3 70B Instruct (:free) — 한국어 OK, JSON schema 준수도 양호.
+    modelId: 'meta-llama/llama-3.3-70b-instruct:free',
+    // sk-or-v1- 접두사 + 64자 hex 정도
+    keyPattern: /^sk-or-v1-[A-Za-z0-9]{40,}$/,
+    browserDirect: true,
+    accent: { from: '#6E40C9', to: '#A5A5FF' },
+    freeTier: '무료 모델 일 50회 (크레딧 충전 시 1000회) / 분당 20회',
+  },
+  cerebras: {
+    id: 'cerebras',
+    displayName: 'Cerebras (초고속)',
+    signupUrl: 'https://cloud.cerebras.ai',
+    signupGuide:
+      'Cerebras Cloud 가입 → API Keys → "Create Key" → 복사 (30초). 무료 계정 즉시 발급.',
+    // Cerebras 공식 docs 기준 stable 모델. 한국어/구조화 출력 모두 양호.
+    modelId: 'llama-3.3-70b',
+    // csk- 접두사 추정. 실제 키 형식이 다르면 빌드 후 §6 검증 단계에서 정정.
+    keyPattern: /^csk-[A-Za-z0-9]{20,}$/,
+    // 워크오더 §6: CORS 실측 필요. SDK docs 기준 브라우저 호출 지원으로 표기하지만,
+    // 실제 배포 후 네트워크 탭에서 확인 후 false 로 토글할 수 있음.
+    browserDirect: true,
+    accent: { from: '#0F766E', to: '#5EEAD4' },
+    freeTier: '분당 6만 토큰 / 일 약 1700회 (Llama 3.3 70B 기준)',
+  },
   claude: {
     id: 'claude',
     displayName: 'Anthropic Claude (서버 전용)',
@@ -77,5 +113,16 @@ export function validateKeyFormat(provider: AiProvider, key: string): boolean {
   return PROVIDERS[provider].keyPattern.test(key.trim());
 }
 
-/** 사용자에게 보여줄 공급사 목록 — 브라우저 직접 호출 가능한 것만. */
-export const BYOK_PROVIDERS: AiProvider[] = ['gemini', 'groq'];
+/**
+ * 사용자에게 보여줄 공급사 목록 — 브라우저 직접 호출 가능한 것만.
+ * 추천 순서는 무료 한도 큰 것부터 (Groq > OpenRouter > Cerebras > Gemini).
+ *
+ * Cerebras 는 워크오더 §6 CORS 실측 후 막히면 이 배열에서 제외하고
+ * PROVIDERS 의 browserDirect 를 false 로 토글한다.
+ */
+export const BYOK_PROVIDERS: AiProvider[] = [
+  'groq',
+  'openrouter',
+  'cerebras',
+  'gemini',
+];

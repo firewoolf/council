@@ -3,6 +3,8 @@
  * Supabase 스키마와 1:1 대응.
  */
 
+import type { AiProvider } from '@/lib/ai/providers';
+
 export interface Session {
   id: string;
   /** 비로그인 허용 → device_id (LocalStorage) */
@@ -12,7 +14,12 @@ export interface Session {
   /** 원본 고민 텍스트 */
   concern: string;
   status: 'active' | 'concluded';
-  aiProvider: 'gemini' | 'groq' | 'claude';
+  /**
+   * 세션에 사용된 LLM 공급사.
+   * AiProvider 전체와 동기화 — BYOK 공급사 추가 시 함께 갱신된다.
+   * Supabase 도입 시 ai_provider enum 마이그레이션 필요.
+   */
+  aiProvider: AiProvider;
   createdAt: string; // ISO
 }
 

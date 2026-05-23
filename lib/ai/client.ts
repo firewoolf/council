@@ -12,6 +12,8 @@
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
+import { createCerebras } from '@ai-sdk/cerebras';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 
@@ -41,6 +43,18 @@ function getModel(provider: AiProvider, apiKey: string) {
       return createGoogleGenerativeAI({ apiKey })(config.modelId);
     case 'groq':
       return createGroq({ apiKey })(config.modelId);
+    case 'openrouter':
+      // HTTP-Referer / X-Title 은 OpenRouter 가 어떤 앱에서 호출됐는지
+      // 식별/통계용으로 권장하는 헤더. 누락해도 동작은 하지만 적어두는 게 매너.
+      return createOpenRouter({
+        apiKey,
+        headers: {
+          'HTTP-Referer': 'https://council.app',
+          'X-Title': 'COUNCIL',
+        },
+      })(config.modelId);
+    case 'cerebras':
+      return createCerebras({ apiKey })(config.modelId);
     case 'claude':
       // 브라우저에서는 호출 불가. 호출 시도 자체가 잘못된 경로.
       throw new AiCallError(
@@ -102,8 +116,22 @@ export async function testApiKey(
 }
 
 /**
+ * 작업별 temperature.
+ * 토론 발언은 높게 — 엣지·통찰은 덜 안전한 샘플링에서 나온다.
+ * 추천·결론은 낮게 — 구조화 출력 안정성 우선.
+ */
+const TEMPERATURE = {
+  speech: 0.9,
+  recommend: 0.45,
+  conclusion: 0.55,
+} as const;
+
+/**
  * 토론용 단일 발언 생성 schema.
  * generateObject 1회 호출에 발언자 + 내용 통합 (RPM 절약).
+ *
+ * max는 300 — 프롬프트는 "200자 이내"를 요구하지만, 약간 초과한 응답이
+ * 스키마 검증에서 곧장 실패하지 않도록 헤드룸을 둔다.
  */
 export const speechSchema = z.object({
   speakerName: z.string().describe('당신의 페르소나 이름. 정확히 그대로'),
@@ -111,7 +139,10 @@ export const speechSchema = z.object({
     .string()
     .nullable()
     .describe('직전 다른 페르소나에게 반박할 때만 그 메시지 id. 없으면 null'),
-  message: z.string().max(200).describe('발언 본문 — 한국어 150자 이내'),
+  message: z
+    .string()
+    .max(300)
+    .describe('발언 본문 — 한국어 200자 이내. 원론·양비론 금지, 구체적인 한 방.'),
   isQuestion: z.boolean().describe('사용자에게 직접 질문을 던졌으면 true'),
 });
 
@@ -133,6 +164,7 @@ export async function generateSpeech(args: {
       schema: speechSchema,
       system: args.system,
       prompt: args.prompt,
+      temperature: TEMPERATURE.speech,
       maxRetries: 1,
     });
     return object;
@@ -156,6 +188,7 @@ export async function recommendPersonas(args: {
       model,
       schema: recommendationSchema,
       prompt: buildRecommenderPrompt(args.concern),
+      temperature: TEMPERATURE.recommend,
       maxRetries: 1,
     });
     return object;
@@ -180,6 +213,7 @@ export async function generateConclusion(args: {
       model,
       schema: conclusionSchema,
       prompt: buildConclusionPrompt(args.concern, args.messages, args.personaMap),
+      temperature: TEMPERATURE.conclusion,
       maxRetries: 1,
     });
     return object;
