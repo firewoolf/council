@@ -18,6 +18,7 @@ import {
 } from '@/lib/ai/providers';
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
+import { PERSONA_MAP } from '@/lib/prompts/personas';
 import {
   sanitizeRecommendedIds,
   sanitizeSelectedIds,
@@ -25,6 +26,7 @@ import {
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
+import type { CastMember } from '@/types/persona';
 
 const FACILITATOR_ID = 'facilitator';
 
@@ -156,7 +158,6 @@ export default function NewSessionPage() {
       toast.error('AI 공급사가 선택되지 않았습니다.');
       return;
     }
-    // B-4 마지막 가드: picking 단계에 있던 사이 운영자가 페르소나를 삭제했을 수 있다.
     const safe = sanitizeSelectedIds(selectedIds);
     if (safe.dropped.length > 0) {
       toast.info(
@@ -168,17 +169,30 @@ export default function NewSessionPage() {
       toast.error('최소 2명 이상 선택해주세요.');
       return;
     }
-    // Phase A — 선택된 personaIds 중에서만 stance 추출 (사회자/풀에서 추가된 페르소나는 자연히 제외).
-    const filteredStances: Record<string, string> = {};
+    // Phase B — 아키타입 id 배열 → CastMember[] 변환.
+    // id 는 아키타입 id 그대로(§4.3) 사용해 옛 messages.speakerId 호환.
+    const cast: CastMember[] = [];
     for (const id of safe.ids) {
-      if (stances[id]) filteredStances[id] = stances[id];
+      const arch = PERSONA_MAP[id];
+      if (!arch) continue;
+      cast.push({
+        id,
+        source: 'archetype',
+        archetypeId: id,
+        name: arch.name,
+        role: arch.role,
+        temperament: arch.temperament,
+        stance: stances[id] ?? '',
+        colorFrom: arch.colorFrom,
+        colorTo: arch.colorTo,
+        isFacilitator: id === FACILITATOR_ID,
+      });
     }
     const session = createSession({
       concern,
-      personaIds: safe.ids,
+      cast,
       aiProvider: provider,
       domain,
-      stances: filteredStances,
     });
     router.push(`/session/${session.id}`);
   }, [provider, selectedIds, concern, domain, stances, createSession, router]);

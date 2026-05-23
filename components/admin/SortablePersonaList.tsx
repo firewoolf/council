@@ -25,7 +25,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface Props {
   initial: readonly Persona[];
@@ -176,8 +176,7 @@ function SortableItem({
             <p className="text-sm font-semibold text-text">{persona.name}</p>
             <p className="truncate text-xs text-text-muted">{persona.role}</p>
             <p className="mt-1 font-mono text-[10px] text-text-dim">
-              {persona.id} · {persona.debateStyle}
-              {persona.dynamic && ' · dynamic'}
+              {persona.id} · {persona.debateStyle} · {persona.temperament}
             </p>
           </div>
           <ArrowRight className="size-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />

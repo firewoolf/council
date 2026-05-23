@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface PersonaOrbProps {
   persona: Pick<Persona, 'name' | 'colorFrom' | 'colorTo'>;

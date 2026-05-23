@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { useSessionsStore } from '@/store/sessions';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 결론 화면.
@@ -145,9 +145,7 @@ export default function SessionSummaryPage() {
               <PersonaOrb persona={persona} size={36} className="shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-text">
-                  {persona.dynamic && domain
-                    ? `${persona.name} (${domain})`
-                    : persona.name}
+                  {persona.name}
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-text/90">
                   {position}

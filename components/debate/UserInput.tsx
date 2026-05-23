@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PERSONAS } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 type Tab = 'speak' | 'instruct' | 'add';
 
@@ -193,7 +193,7 @@ export function UserInput({
                       <PersonaOrb persona={p} size={28} glow="none" />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-xs font-semibold text-text">
-                          {p.dynamic && domain ? `${p.name} (${domain})` : p.name}
+                          {p.name}
                         </p>
                         <p className="truncate text-[10px] text-text-muted">
                           {p.role}

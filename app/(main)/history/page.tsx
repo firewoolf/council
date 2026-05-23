@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 전체 회의 기록.
@@ -17,7 +17,7 @@ import type { Persona } from '@/types/persona';
 export default function HistoryPage() {
   const mounted = useHasMounted();
   const sessions = useSessionsStore((s) => s.sessions);
-  const sessionPersonas = useSessionsStore((s) => s.sessionPersonas);
+  const sessionCast = useSessionsStore((s) => s.sessionCast);
 
   const all = mounted
     ? Object.values(sessions).sort((a, b) =>
@@ -62,9 +62,9 @@ export default function HistoryPage() {
 
       <ul className="flex flex-col gap-2">
         {all.map((session) => {
-          const ids = sessionPersonas[session.id] ?? [];
-          const personas = ids
-            .map((id) => PERSONA_MAP[id])
+          const cast = sessionCast?.[session.id] ?? [];
+          const personas = cast
+            .map((m) => (m.archetypeId ? PERSONA_MAP[m.archetypeId] : undefined))
             .filter((p): p is Persona => Boolean(p))
             .slice(0, 5);
           return (

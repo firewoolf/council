@@ -3,7 +3,7 @@ import { CornerDownRight, HelpCircle, Megaphone, User } from 'lucide-react';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/debate';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface MessageCardProps {
   message: Message;

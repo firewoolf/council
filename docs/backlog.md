@@ -7,13 +7,35 @@
 
 ## Active
 
-(현재 active 항목 없음)
+### 트랙① Phase B-2 — 동적 생성 + 커스텀 + picker 재작성
+B-1 출하·검증 통과 후 착수. 워크오더 `docs/workorder-persona-B-cast.md` §5.
+- 추천기 `panelDesignSchema`(동적 생성), `sanitizePanel` 재작성, 커스텀 추가 폼,
+  PersonaPicker 재작성, 렌더링 cast 전환, `conclusionSchema` enum 해제.
+- 착수 전 §5.1 리스크 검증 필요 — Gemini/Groq 에서 panelDesignSchema 구조화 출력
+  안정성 확인.
+
+### 트랙① Phase B-3 (선택) — Supabase `session_cast` 마이그레이션
+미연결이라 블로킹 아님.
 
 ---
 
 ## Done
 
-### 트랙① Phase A — stance 도입 (commit 현재)
+### 트랙① Phase B-1 — 데이터 모델 마이그레이션 (commit 현재)
+워크오더 `docs/workorder-persona-B-cast.md` §4. "보이는 변화 0, 데이터 배관만" 출하.
+- ✅ `types/persona.ts`: `Persona` → `Archetype` 개명, `Temperament` union, `CastMember` 신규. `dynamic` 필드 제거.
+- ✅ `data/personas.json`: 10명 모두 temperament 추가 (워크오더 §4.2 매핑), `dynamic` 제거, domain-expert 자리표시자 정리.
+- ✅ `data/prompts.json`: `temperamentDirectives` 5개 추가 (BASE 의 굴복/벙벙함 가드와 충돌 없게 "단, …" 가드 포함).
+- ✅ `lib/admin/schemas.ts`: `personaSchema`(temperament 추가, dynamic 제거), `promptsSchema`(temperamentDirectives 5종 추가).
+- ✅ `components/admin/PersonaForm.tsx`: temperament 셀렉터 추가, dynamic 체크박스 제거. `PromptsEditForm` 에 5개 textarea.
+- ✅ `store/sessions.ts`: `sessionPersonas` + `sessionStances` → `sessionCast: Record<sessionId, CastMember[]>`. `persist` `version: 1` + `migrate` (v0→v1). 알 수 없는 아키타입 id 는 드롭하되 앱은 살림.
+- ✅ `composePersonaPrompt(cast: CastMember, { concern })`: temperament 지시 + stance + characterPrompt 라이브/스냅샷 분기 + 미존재 아키타입 방어.
+- ✅ `useDebate`: `EMPTY_CAST` 모듈 const, `cast` 구독, `activePersonas: CastMember[]`, `addCastMember`. `composePersonaPrompt` / `buildDebateContext` / `generateConclusion` 호출 모두 cast 전환.
+- ✅ `orchestrator.ts`: `decideNextSpeaker(activeCast)`, `buildDebateContext`/`buildConclusionPrompt` 인자 cast로. `conclusionSchema.personaId` enum 은 그대로(B-2 에서 해제).
+- ✅ `session/new/page.tsx` `handleStart`: `safe.ids` + `stances` → `CastMember[]` 변환 후 `createSession({ cast })`.
+- ✅ 렌더링은 그대로 — debate UI 는 PERSONA_MAP 조회 유지 (`m.archetypeId` 로 매핑). B-1 통찰에 따라 generated/custom 등장하는 B-2 에서만 cast 직접 조회로 전환.
+
+### 트랙① Phase A — stance 도입 (commit 0fb8a73)
 워크오더 `docs/workorder-persona-A-stance.md` 기반.
 - ✅ `recommendationSchema.recommended` 에 `stance: string` 추가. enum personaId 유지(고정 10명).
 - ✅ `buildRecommenderPrompt` 에 "추진/반대/제3 각도로 입장 갈리게" 강제 지시.

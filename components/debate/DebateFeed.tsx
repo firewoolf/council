@@ -6,7 +6,7 @@ import { MessageCard } from './MessageCard';
 import { TypingIndicator } from './TypingIndicator';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import type { Message } from '@/types/debate';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface DebateFeedProps {
   messages: readonly Message[];

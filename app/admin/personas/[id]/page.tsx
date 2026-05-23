@@ -21,9 +21,21 @@ export default function AdminPersonaDetailPage({ params }: Props) {
   const persona = PERSONA_MAP[params.id];
   if (!persona) notFound();
 
-  const composed = composePersonaPrompt(persona, {
-    domain: persona.dynamic ? '[동적 주입 예: 핀테크]' : undefined,
-  });
+  // Phase B — composePersonaPrompt 는 CastMember 를 받는다. 미리보기용 임시 변환.
+  const composed = composePersonaPrompt(
+    {
+      id: persona.id,
+      source: 'archetype',
+      archetypeId: persona.id,
+      name: persona.name,
+      role: persona.role,
+      temperament: persona.temperament,
+      stance: '[미리보기 — 실제 세션에선 추천기가 배정한 입장이 들어갑니다]',
+      colorFrom: persona.colorFrom,
+      colorTo: persona.colorTo,
+    },
+    { concern: '[미리보기 — 실제 세션 고민이 여기에 들어갑니다]' },
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,8 +54,7 @@ export default function AdminPersonaDetailPage({ params }: Props) {
           <h1 className="text-xl font-bold text-text">{persona.name}</h1>
           <p className="text-sm text-text-muted">{persona.role}</p>
           <p className="mt-1 font-mono text-[11px] text-text-dim">
-            {persona.id} · {persona.debateStyle}
-            {persona.dynamic && ' · dynamic'}
+            {persona.id} · {persona.debateStyle} · {persona.temperament}
           </p>
         </div>
         {isEditEnabled() && (

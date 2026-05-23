@@ -7,7 +7,7 @@ import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 홈 — 최근 회의 5개 표시.
@@ -16,7 +16,7 @@ import type { Persona } from '@/types/persona';
 export function RecentSessions() {
   const mounted = useHasMounted();
   const sessions = useSessionsStore((s) => s.sessions);
-  const sessionPersonas = useSessionsStore((s) => s.sessionPersonas);
+  const sessionCast = useSessionsStore((s) => s.sessionCast);
 
   const recent = mounted
     ? Object.values(sessions)
@@ -50,9 +50,11 @@ export function RecentSessions() {
       ) : (
         <ul className="flex flex-col gap-2">
           {recent.map((session) => {
-            const ids = sessionPersonas[session.id] ?? [];
-            const personas = ids
-              .map((id) => PERSONA_MAP[id])
+            // Phase B — cast 의 이름·색을 그대로 쓰지만 (스냅샷) 렌더링은
+            // PERSONA_MAP 조회로 일관 — 단, archetype 출신만 매칭됨.
+            const cast = sessionCast?.[session.id] ?? [];
+            const personas = cast
+              .map((m) => (m.archetypeId ? PERSONA_MAP[m.archetypeId] : undefined))
               .filter((p): p is Persona => Boolean(p))
               .slice(0, 4);
             return (

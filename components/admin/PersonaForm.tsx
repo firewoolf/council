@@ -27,6 +27,14 @@ const DEBATE_STYLES: Array<{ value: PersonaInput['debateStyle']; label: string }
   { value: 'facilitator', label: '중재+질문' },
 ];
 
+const TEMPERAMENTS: Array<{ value: PersonaInput['temperament']; label: string; hint: string }> = [
+  { value: 'advocate', label: '옹호가 (advocate)', hint: '추진/실행' },
+  { value: 'critic', label: '비판가 (critic)', hint: '리스크/허점' },
+  { value: 'analyst', label: '분석가 (analyst)', hint: '데이터/구조' },
+  { value: 'provocateur', label: '독설가 (provocateur)', hint: '도발/직설' },
+  { value: 'empath', label: '공감가 (empath)', hint: '사람/감정' },
+];
+
 interface Props {
   initial: PersonaInput;
   /**
@@ -125,18 +133,32 @@ export function PersonaForm({ initial, mode }: Props) {
         </Field>
       </div>
 
-      <Field label="반박 스타일" error={errors.debateStyle?.message}>
-        <select
-          {...register('debateStyle')}
-          className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
-        >
-          {DEBATE_STYLES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label} ({s.value})
-            </option>
-          ))}
-        </select>
-      </Field>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="반박 스타일 (debateStyle, 내부 표현)" error={errors.debateStyle?.message}>
+          <select
+            {...register('debateStyle')}
+            className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
+          >
+            {DEBATE_STYLES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label} ({s.value})
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="기질 (temperament, 사용자 노출 분류)" error={errors.temperament?.message}>
+          <select
+            {...register('temperament')}
+            className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
+          >
+            {TEMPERAMENTS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label} · {t.hint}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="색상 시작 (#RRGGBB)" error={errors.colorFrom?.message}>
@@ -194,14 +216,6 @@ export function PersonaForm({ initial, mode }: Props) {
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-text">
-        <input
-          type="checkbox"
-          {...register('dynamic')}
-          className="size-4 accent-primary"
-        />
-        <span>도메인 동적 주입형 페르소나 (예: 도메인 전문가)</span>
-      </label>
 
       <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-background/90 px-4 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-end">
         {commitInfo && (

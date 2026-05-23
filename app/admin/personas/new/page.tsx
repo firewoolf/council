@@ -38,6 +38,7 @@ export default function AdminPersonaNewPage() {
     role: '',
     coreValue: '',
     debateStyle: 'data',
+    temperament: 'analyst',
     nonNegotiable: '',
     weakness: '',
     systemPrompt:
@@ -45,7 +46,6 @@ export default function AdminPersonaNewPage() {
     colorFrom: '#4C1D95',
     colorTo: '#8B5CF6',
     userQuestions: ['예: 이 분야에서 가장 흔한 실패 케이스는?'],
-    dynamic: false,
   };
 
   return (

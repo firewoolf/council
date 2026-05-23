@@ -1,49 +1,65 @@
 /**
- * 페르소나 마스터 데이터 로더.
+ * 페르소나 마스터 데이터 로더 + 시스템 프롬프트 합성기.
  *
- * 데이터 출처: `data/personas.json` (어드민 페이지에서 편집 가능)
+ * Phase B 구분:
+ *   - PERSONAS / PERSONA_MAP : 아키타입(Archetype) 카탈로그. 데이터 출처는
+ *     `data/personas.json` (어드민 편집 가능).
+ *   - composePersonaPrompt : CastMember 단위 호출. archetype 출신이면
+ *     PERSONA_MAP[archetypeId] 로 라이브 조회, generated/custom 이면
+ *     cast.characterPrompt 스냅샷 사용.
  *
- * - 색상/프롬프트는 JSON 단일 진실 공급원.
- * - systemPrompt 는 BASE_PROMPT 와 합쳐서 사용 (composePersonaPrompt 헬퍼).
- * - JSON 스키마 어긋나면 빌드 시점에 TS가 잡아주진 않으므로, 어드민 저장 시점에 Zod 검증 필요.
+ * 합성 순서 (스펙 §5.1):
+ *   BASE_PROMPT
+ *   + [당신의 캐릭터] 이름/역할
+ *   + TEMPERAMENT_DIRECTIVE[cast.temperament]
+ *   + 캐릭터 프롬프트
+ *   + [이 회의에서 당신의 입장] cast.stance (비어있으면 생략)
+ *   + [사용자의 고민] concern
+ *   + OUTPUT_HINT
  */
 
 import personasJson from '@/data/personas.json';
-import type { Persona } from '@/types/persona';
-import { BASE_PROMPT, OUTPUT_HINT } from '../base';
+import type { Archetype, CastMember } from '@/types/persona';
+import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '../base';
 
-/** 10개 페르소나 전체 — JSON 순서 그대로. */
-export const PERSONAS: readonly Persona[] = personasJson as readonly Persona[];
+/** 10개 아키타입 전체 — JSON 순서 그대로. */
+export const PERSONAS: readonly Archetype[] =
+  personasJson as readonly Archetype[];
 
 /** ID 기준 빠른 조회용 맵. */
-export const PERSONA_MAP: Record<string, Persona> = Object.fromEntries(
+export const PERSONA_MAP: Record<string, Archetype> = Object.fromEntries(
   PERSONAS.map((p) => [p.id, p]),
 );
 
 /**
- * 페르소나 1명의 최종 시스템 프롬프트 합성.
- * BASE_PROMPT + 캐릭터 프롬프트 + (Phase A) 입장 블록 + 고민 + 출력 가이드.
+ * 한 명의 CastMember 시스템 프롬프트 합성.
  *
- * 도메인 전문가(dynamic)는 domain 인자를 넘겨 분야를 주입한다.
- * stance 는 추천기가 이 페르소나에게 배정한 "이 고민에서의 주장".
- * 빈 문자열이면 stance 블록을 생략 — 풀에서 수동 추가된 페르소나는 중립으로 행동.
+ * - source==='archetype' 인데 PERSONA_MAP 조회 실패(어드민 삭제) →
+ *   캐릭터 프롬프트 없이라도 합성 진행. BASE + 이름/역할 + temperament 지시
+ *   + stance 만으로도 일관 동작 보장.
+ * - stance 가 빈 문자열이면 stance 블록 생략 (풀 수동 추가/중립 케이스).
  */
 export function composePersonaPrompt(
-  persona: Persona,
-  context?: { domain?: string; concern?: string; stance?: string },
+  cast: CastMember,
+  context?: { concern?: string },
 ): string {
-  const characterPrompt = persona.dynamic && context?.domain
-    ? persona.systemPrompt.replace(
-        '(구체적 분야는 회의 시작 시 동적으로 주입됩니다 — 예: 여행앱 → 여행업계 전문가, 핀테크 → 금융 규제 전문가)',
-        `당신의 구체적 분야는 [${context.domain}] 입니다.`,
-      )
-    : persona.systemPrompt;
+  // 캐릭터 프롬프트: archetype 은 라이브 조회, 그 외는 스냅샷.
+  let characterPrompt = '';
+  if (cast.source === 'archetype' && cast.archetypeId) {
+    const arch = PERSONA_MAP[cast.archetypeId];
+    if (arch) characterPrompt = arch.systemPrompt;
+    // arch 없음 = 어드민이 삭제. characterPrompt 빈 채로 진행.
+  } else if (cast.characterPrompt) {
+    characterPrompt = cast.characterPrompt;
+  }
 
-  // Phase A — stance 블록. 사용자 굴복 금지 규칙과 별개로,
-  // "이 고민에 대해 배정된 입장을 견지하라" 는 토론용 내적 일관성 규칙.
+  const temperamentBlock = TEMPERAMENT_DIRECTIVES[cast.temperament]?.trim()
+    ? `\n${TEMPERAMENT_DIRECTIVES[cast.temperament]}`
+    : '';
+
   const stanceBlock =
-    context?.stance && context.stance.trim().length > 0
-      ? `\n\n[이 회의에서 당신의 입장]\n${context.stance}\n\n이 입장을 토론 내내 일관되게 견지하십시오. 다른 페르소나의 반박에 논리적으로 밀리면 부분 인정은 가능하나, 핵심 입장은 끝까지 지킵니다.`
+    cast.stance && cast.stance.trim().length > 0
+      ? `\n\n[이 회의에서 당신의 입장]\n${cast.stance}\n\n이 입장을 토론 내내 일관되게 견지하십시오. 다른 페르소나의 반박에 논리적으로 밀리면 부분 인정은 가능하나, 핵심 입장은 끝까지 지킵니다.`
       : '';
 
   const concernBlock = context?.concern
@@ -52,10 +68,13 @@ export function composePersonaPrompt(
 
   return [
     BASE_PROMPT,
-    `\n[당신의 캐릭터]\n당신의 이름은 "${persona.name}" 입니다.\n`,
+    `\n[당신의 캐릭터]\n당신의 이름은 "${cast.name}" 입니다. 역할: ${cast.role}.\n`,
+    temperamentBlock,
     characterPrompt,
     stanceBlock,
     concernBlock,
     `\n\n${OUTPUT_HINT}`,
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }

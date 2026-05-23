@@ -9,7 +9,7 @@
  */
 
 import { PERSONAS, PERSONA_MAP } from '@/lib/prompts/personas';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 const FACILITATOR_ID = 'facilitator';
 const DOMAIN_EXPERT_ID = 'domain-expert';

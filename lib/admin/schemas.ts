@@ -19,6 +19,14 @@ const DEBATE_STYLES = [
   'facilitator',
 ] as const;
 
+const TEMPERAMENTS = [
+  'advocate',
+  'critic',
+  'analyst',
+  'provocateur',
+  'empath',
+] as const;
+
 const hexColor = z
   .string()
   .regex(/^#[0-9A-Fa-f]{6}$/, '#RRGGBB 형식이어야 합니다');
@@ -32,6 +40,7 @@ export const personaSchema = z.object({
   role: z.string().min(1, '필수').max(80),
   coreValue: z.string().min(1, '필수').max(200),
   debateStyle: z.enum(DEBATE_STYLES),
+  temperament: z.enum(TEMPERAMENTS),
   nonNegotiable: z.string().min(1, '필수').max(200),
   weakness: z.string().min(1, '필수').max(200),
   systemPrompt: z.string().min(20, '최소 20자').max(4000),
@@ -41,7 +50,6 @@ export const personaSchema = z.object({
     .array(z.string().min(1).max(200))
     .min(1, '최소 1개')
     .max(10, '최대 10개'),
-  dynamic: z.boolean().optional(),
 });
 
 export type PersonaInput = z.infer<typeof personaSchema>;
@@ -51,6 +59,17 @@ export const personasArraySchema = z.array(personaSchema);
 export const promptsSchema = z.object({
   basePrompt: z.string().min(50, '최소 50자').max(4000),
   outputHint: z.string().min(20, '최소 20자').max(2000),
+  /**
+   * Phase B — temperament 별 토론 자세 지시 조각.
+   * 각 키는 최소 10자 (운영자가 비워두면 합성이 빈약해진다).
+   */
+  temperamentDirectives: z.object({
+    advocate: z.string().min(10).max(800),
+    critic: z.string().min(10).max(800),
+    analyst: z.string().min(10).max(800),
+    provocateur: z.string().min(10).max(800),
+    empath: z.string().min(10).max(800),
+  }),
 });
 
 export type PromptsInput = z.infer<typeof promptsSchema>;

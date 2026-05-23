@@ -4,28 +4,33 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 import type { Conclusion } from '@/lib/prompts/orchestrator';
+import { PERSONA_MAP } from '@/lib/prompts/personas';
 import type { Message, Session } from '@/types/debate';
+import type { Archetype, CastMember } from '@/types/persona';
 
 /**
  * 세션 + 메시지 로컬 저장소.
  * Supabase 도입 전까지 LocalStorage가 단일 진실 공급원.
  *
+ * Phase B 마이그레이션 (v0 → v1):
+ *   v0: sessionPersonas: Record<sessionId, string[]>
+ *       + sessionStances: Record<sessionId, Record<personaId, string>>  (Phase A)
+ *   v1: sessionCast:    Record<sessionId, CastMember[]>
+ *
+ * v0 → v1 변환은 모든 personaId 가 아키타입(고정 10명) 출신이라는 가정에서
+ * 안전하다. 모르는 id 는 드롭하되 앱은 살려둔다.
+ *
  * 저장 단위:
  *   sessions: Record<sessionId, Session>
- *   sessionPersonas: Record<sessionId, string[]>  (personaId 배열)
+ *   sessionCast: Record<sessionId, CastMember[]>
  *   messages: Record<sessionId, Message[]>
- *   domains: Record<sessionId, string | null>  (도메인 전문가 동적 분야)
+ *   domains: Record<sessionId, string | null>  (도메인 전문가 동적 분야 — 호환 잔존)
+ *   conclusions: Record<sessionId, Conclusion>
  */
 
 interface SessionsState {
   sessions: Record<string, Session>;
-  sessionPersonas: Record<string, string[]>;
-  /**
-   * Phase A — 세션별 페르소나 입장 매핑 (personaId → stance 한 줄).
-   * 추천된 3명에게만 들어있고, 풀에서 수동 추가된 페르소나는 stance 없음(중립).
-   * 가산적 필드 — 기존 LocalStorage 세션은 이 필드 없이 저장돼 있고, 셀렉터는 항상 `?? {}` 가드.
-   */
-  sessionStances: Record<string, Record<string, string>>;
+  sessionCast: Record<string, CastMember[]>;
   messages: Record<string, Message[]>;
   domains: Record<string, string | null>;
   conclusions: Record<string, Conclusion>;
@@ -33,26 +38,22 @@ interface SessionsState {
   createSession: (input: {
     concern: string;
     title?: string;
-    personaIds: string[];
+    cast: CastMember[];
     aiProvider: Session['aiProvider'];
     domain?: string | null;
-    /** Phase A — personaId → stance 한 줄. 빈 객체면 모든 페르소나가 중립. */
-    stances?: Record<string, string>;
   }) => Session;
 
   getSession: (id: string) => Session | undefined;
-  getPersonaIds: (id: string) => string[];
+  getCast: (id: string) => CastMember[];
+  getCastMember: (sessionId: string, memberId: string) => CastMember | undefined;
   getDomain: (id: string) => string | null;
   getMessages: (id: string) => Message[];
   getConclusion: (id: string) => Conclusion | null;
-  /** Phase A — personaId → stance. 없는 세션은 빈 객체. */
-  getStances: (id: string) => Record<string, string>;
 
   appendMessage: (sessionId: string, message: Message) => void;
-  updatePersonaIds: (sessionId: string, personaIds: string[]) => void;
+  updateCast: (sessionId: string, cast: CastMember[]) => void;
   /**
-   * D-1: 토론 중 폴백이 발생해서 실제 사용 공급사가 바뀌었을 때.
-   * 기존 값과 같으면 no-op — 매 턴마다 호출돼도 zustand write 안 일어남.
+   * D-1: 자동 폴백 시 실제 사용 공급사 동기화. 값이 같으면 no-op.
    */
   updateSessionProvider: (
     sessionId: string,
@@ -83,24 +84,64 @@ function summarizeTitle(concern: string): string {
   return `${trimmed.slice(0, 38)}…`;
 }
 
+/**
+ * v0 → v1 데이터 변환.
+ * 옛 `sessionPersonas`(string[]) + `sessionStances` 를 `sessionCast` 로 합친다.
+ *
+ * 예외 처리:
+ *   - 옛 personaId 가 PERSONA_MAP 에 없으면 그 멤버만 드롭(세션은 살림).
+ *   - sessionPersonas 자체가 없으면 빈 cast 로 둠.
+ */
+function migrateV0ToV1(persisted: unknown): Partial<SessionsState> {
+  const old = (persisted ?? {}) as {
+    sessionPersonas?: Record<string, string[]>;
+    sessionStances?: Record<string, Record<string, string>>;
+    sessionCast?: Record<string, CastMember[]>;
+    [k: string]: unknown;
+  };
+
+  // 이미 v1 형태로 있으면(혼합 상태 대비) 그대로 보존.
+  const sessionCast: Record<string, CastMember[]> = { ...(old.sessionCast ?? {}) };
+
+  for (const [sid, ids] of Object.entries(old.sessionPersonas ?? {})) {
+    if (sessionCast[sid]) continue; // v1 데이터 우선
+    const members: CastMember[] = [];
+    for (const aid of ids ?? []) {
+      const arch: Archetype | undefined = PERSONA_MAP[aid];
+      if (!arch) continue; // 알 수 없는 아키타입 → 드롭 (앱은 살림)
+      members.push({
+        id: aid, // §4.3 — 아키타입 id 그대로 (messages.speakerId 호환)
+        source: 'archetype',
+        archetypeId: aid,
+        name: arch.name,
+        role: arch.role,
+        temperament: arch.temperament,
+        stance: old.sessionStances?.[sid]?.[aid] ?? '',
+        colorFrom: arch.colorFrom,
+        colorTo: arch.colorTo,
+        isFacilitator: aid === 'facilitator',
+      });
+    }
+    sessionCast[sid] = members;
+  }
+
+  // 옛 키 정리해서 반환
+  const { sessionPersonas: _p, sessionStances: _s, ...rest } = old;
+  void _p;
+  void _s;
+  return { ...(rest as Partial<SessionsState>), sessionCast };
+}
+
 export const useSessionsStore = create<SessionsState>()(
   persist(
     (set, get) => ({
       sessions: {},
-      sessionPersonas: {},
-      sessionStances: {},
+      sessionCast: {},
       messages: {},
       domains: {},
       conclusions: {},
 
-      createSession: ({
-        concern,
-        title,
-        personaIds,
-        aiProvider,
-        domain,
-        stances,
-      }) => {
+      createSession: ({ concern, title, cast, aiProvider, domain }) => {
         const id = generateId();
         const session: Session = {
           id,
@@ -113,8 +154,7 @@ export const useSessionsStore = create<SessionsState>()(
 
         set((s) => ({
           sessions: { ...s.sessions, [id]: session },
-          sessionPersonas: { ...s.sessionPersonas, [id]: personaIds },
-          sessionStances: { ...s.sessionStances, [id]: stances ?? {} },
+          sessionCast: { ...s.sessionCast, [id]: cast },
           messages: { ...s.messages, [id]: [] },
           domains: { ...s.domains, [id]: domain ?? null },
         }));
@@ -123,12 +163,12 @@ export const useSessionsStore = create<SessionsState>()(
       },
 
       getSession: (id) => get().sessions[id],
-      getPersonaIds: (id) => get().sessionPersonas[id] ?? [],
+      getCast: (id) => get().sessionCast?.[id] ?? [],
+      getCastMember: (sessionId, memberId) =>
+        get().sessionCast?.[sessionId]?.find((m) => m.id === memberId),
       getDomain: (id) => get().domains[id] ?? null,
       getMessages: (id) => get().messages[id] ?? [],
       getConclusion: (id) => get().conclusions[id] ?? null,
-      // sessionStances 자체가 undefined 인 마이그레이션 전 세션도 안전
-      getStances: (id) => get().sessionStances?.[id] ?? {},
 
       saveConclusion: (sessionId, conclusion) =>
         set((s) => {
@@ -149,9 +189,9 @@ export const useSessionsStore = create<SessionsState>()(
           },
         })),
 
-      updatePersonaIds: (sessionId, personaIds) =>
+      updateCast: (sessionId, cast) =>
         set((s) => ({
-          sessionPersonas: { ...s.sessionPersonas, [sessionId]: personaIds },
+          sessionCast: { ...s.sessionCast, [sessionId]: cast },
         })),
 
       updateSessionProvider: (sessionId, provider) =>
@@ -182,10 +222,8 @@ export const useSessionsStore = create<SessionsState>()(
         set((s) => {
           const nextSessions = { ...s.sessions };
           delete nextSessions[id];
-          const nextPersonas = { ...s.sessionPersonas };
-          delete nextPersonas[id];
-          const nextStances = { ...(s.sessionStances ?? {}) };
-          delete nextStances[id];
+          const nextCast = { ...(s.sessionCast ?? {}) };
+          delete nextCast[id];
           const nextMessages = { ...s.messages };
           delete nextMessages[id];
           const nextDomains = { ...s.domains };
@@ -194,8 +232,7 @@ export const useSessionsStore = create<SessionsState>()(
           delete nextConclusions[id];
           return {
             sessions: nextSessions,
-            sessionPersonas: nextPersonas,
-            sessionStances: nextStances,
+            sessionCast: nextCast,
             messages: nextMessages,
             domains: nextDomains,
             conclusions: nextConclusions,
@@ -211,8 +248,13 @@ export const useSessionsStore = create<SessionsState>()(
     }),
     {
       name: 'council:sessions',
+      version: 1,
       storage: createJSONStorage(() => localStorage),
-      // 모든 상태 영속. 메시지가 무거워지면 별도 키로 분리 검토 (STEP 4 이후).
+      migrate: (persisted, version) => {
+        if (version >= 1) return persisted as SessionsState;
+        // v0 → v1 (Phase B 마이그레이션)
+        return migrateV0ToV1(persisted) as SessionsState;
+      },
     },
   ),
 );

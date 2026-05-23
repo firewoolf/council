@@ -4,7 +4,7 @@ import { Check, Plus } from 'lucide-react';
 
 import { PersonaOrb } from './PersonaOrb';
 import { cn } from '@/lib/utils';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface PersonaCardProps {
   persona: Persona;
@@ -39,9 +39,10 @@ export function PersonaCard({
   onToggle,
   disabled,
 }: PersonaCardProps) {
-  const isDomainExpert = persona.dynamic;
-  const displayName =
-    isDomainExpert && domain ? `${persona.name} (${domain})` : persona.name;
+  // Phase B — Archetype 에서 dynamic 필드 제거. 풀 카드의 domain 라벨은 더 이상 안 쓴다.
+  // domain 인자는 호출부 호환성 차원에서 시그니처에 잔존하지만 본 카드는 무시한다.
+  void domain;
+  const displayName = persona.name;
 
   return (
     <button

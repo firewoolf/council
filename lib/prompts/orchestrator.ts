@@ -13,7 +13,7 @@
 import { z } from 'zod';
 
 import type { Message } from '@/types/debate';
-import type { Persona } from '@/types/persona';
+import type { CastMember } from '@/types/persona';
 import { PERSONAS } from './personas';
 
 /**
@@ -47,7 +47,7 @@ export type Conclusion = z.infer<typeof conclusionSchema>;
 
 export interface TurnDecision {
   /** 다음 발언자 — null이면 토론 종료 제안 */
-  nextSpeaker: Persona | null;
+  nextSpeaker: CastMember | null;
   /** 종료 트리거가 발동했는지 */
   shouldConclude: boolean;
   /** 디버그용 사유 */
@@ -70,9 +70,10 @@ const HARD_LIMIT = 30;     // 자동 결론 트리거
  * 5. HARD_LIMIT 초과 시 종료 제안
  */
 export function decideNextSpeaker(
-  activePersonas: readonly Persona[],
+  activeCast: readonly CastMember[],
   messages: readonly Message[],
 ): TurnDecision {
+  const activePersonas = activeCast; // 이름 호환용 — 아래 로직은 .id 만 사용
   // instruction(사용자 메타 지시)은 발언 회차에서 제외 — 토론 진행과는 별개 채널.
   const speeches = messages.filter((m) => m.kind !== 'instruction');
   const totalTurns = speeches.length;
@@ -141,12 +142,15 @@ export function decideNextSpeaker(
 /**
  * 페르소나에게 넘길 토론 컨텍스트 프롬프트.
  * 시스템 프롬프트와 별개로, 매 턴 user 메시지로 함께 주입한다.
+ *
+ * cast 는 이 세션의 전체 출연진 — id→이름 맵을 함수 안에서 만든다.
  */
 export function buildDebateContext(
   concern: string,
   messages: readonly Message[],
-  personaMap: Record<string, Persona>,
+  cast: readonly CastMember[],
 ): string {
+  const personaMap = Object.fromEntries(cast.map((m) => [m.id, m]));
   // 사용자 지시(instruction)는 모든 페르소나가 매 턴 인지해야 한다.
   // → 전체 메시지에서 누적 추출.
   const activeInstructions = messages
@@ -194,8 +198,9 @@ ${history || '(아직 발언 없음 — 당신이 첫 발언입니다)'}
 export function buildConclusionPrompt(
   concern: string,
   messages: readonly Message[],
-  personaMap: Record<string, Persona>,
+  cast: readonly CastMember[],
 ): string {
+  const personaMap = Object.fromEntries(cast.map((m) => [m.id, m]));
   const fullHistory = messages
     .map((m) => {
       if (m.speakerId === null) return `[사용자] ${m.content}`;

@@ -28,7 +28,7 @@ import {
   type Conclusion,
 } from '@/lib/prompts/orchestrator';
 import type { Message } from '@/types/debate';
-import type { Persona } from '@/types/persona';
+import type { CastMember } from '@/types/persona';
 import { PROVIDERS, type AiProvider } from './providers';
 import { AiCallError, classifyAiError } from './errors';
 
@@ -205,14 +205,14 @@ export async function generateConclusion(args: {
   apiKey: string;
   concern: string;
   messages: readonly Message[];
-  personaMap: Record<string, Persona>;
+  cast: readonly CastMember[];
 }): Promise<Conclusion> {
   try {
     const model = getModel(args.provider, args.apiKey);
     const { object } = await generateObject({
       model,
       schema: conclusionSchema,
-      prompt: buildConclusionPrompt(args.concern, args.messages, args.personaMap),
+      prompt: buildConclusionPrompt(args.concern, args.messages, args.cast),
       temperature: TEMPERATURE.conclusion,
       maxRetries: 1,
     });

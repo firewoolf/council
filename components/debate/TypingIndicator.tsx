@@ -1,5 +1,5 @@
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface TypingIndicatorProps {
   persona: Persona;

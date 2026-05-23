@@ -4,7 +4,7 @@ import { ArrowLeft, Lock, Pencil } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
 import { isEditEnabled } from '@/lib/admin/github';
-import { BASE_PROMPT, OUTPUT_HINT } from '@/lib/prompts/base';
+import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '@/lib/prompts/base';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,6 +69,32 @@ export default function AdminPromptsPage() {
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-border bg-surface-2 p-4 text-xs leading-relaxed text-text/90">
           {OUTPUT_HINT}
         </pre>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-text">Temperament 지시 조각</h2>
+        <p className="text-xs text-text-muted">
+          페르소나의 기질(temperament)에 따라 합성 프롬프트에 삽입되는 한 단락.
+          5개 모두 운영자가 어드민에서 편집 가능합니다.
+        </p>
+        {(
+          [
+            ['advocate', '옹호가'],
+            ['critic', '비판가'],
+            ['analyst', '분석가'],
+            ['provocateur', '독설가'],
+            ['empath', '공감가'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="space-y-1">
+            <p className="text-xs font-medium text-text-muted">
+              {label} <code className="font-mono text-[10px]">{key}</code>
+            </p>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-surface-2 p-3 text-xs leading-relaxed text-text/90">
+              {TEMPERAMENT_DIRECTIVES[key] || '(비어있음)'}
+            </pre>
+          </div>
+        ))}
       </section>
     </div>
   );

@@ -8,7 +8,7 @@ import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { PERSONAS, PERSONA_MAP } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 interface PersonaPickerProps {
   /** AI가 추천한 personaId 목록 (보통 3개) */
@@ -111,7 +111,7 @@ export function PersonaPicker({
               selected={selectedSet.has(p.id)}
               recommendReason={reasons[p.id]}
               stance={stances[p.id]}
-              domain={p.dynamic ? domain : undefined}
+              domain={undefined}
               onToggle={onToggle}
             />
           ))}
@@ -157,7 +157,7 @@ export function PersonaPicker({
                 key={p.id}
                 persona={p}
                 selected={selectedSet.has(p.id)}
-                domain={p.dynamic ? domain : undefined}
+                domain={undefined}
                 onToggle={onToggle}
               />
             ))}

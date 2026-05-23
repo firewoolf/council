@@ -23,7 +23,7 @@ import { useHasMounted } from '@/hooks/useHasMounted';
 import { useSessionsStore } from '@/store/sessions';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 실시간 자동 토론 회의실.
@@ -41,17 +41,19 @@ export default function SessionRoomPage() {
 
   const session = useSessionsStore((s) => s.sessions[id]);
   const messages = useSessionsStore((s) => s.messages[id] ?? []);
-  const personaIds = useSessionsStore((s) => s.sessionPersonas[id] ?? []);
+  const cast = useSessionsStore((s) => s.sessionCast?.[id] ?? []);
   const domain = useSessionsStore((s) => s.domains[id] ?? null);
   const conclusion = useSessionsStore((s) => s.conclusions[id] ?? null);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
 
+  // B-1 통찰: 모든 cast 멤버가 아키타입 출신이므로 PERSONA_MAP 조회로 렌더링.
+  // B-2 에서 generated/custom 등장하면 이 부분을 cast 직접 조회로 바꾼다.
   const personas = useMemo<Persona[]>(
     () =>
-      personaIds
-        .map((pid) => PERSONA_MAP[pid])
+      cast
+        .map((m) => (m.archetypeId ? PERSONA_MAP[m.archetypeId] : undefined))
         .filter((p): p is Persona => Boolean(p)),
-    [personaIds],
+    [cast],
   );
 
   const { status, thinkingPersona, error, actions } = useDebate(id);
@@ -136,7 +138,7 @@ export default function SessionRoomPage() {
                   className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-1 text-xs text-text/90"
                 >
                   <PersonaOrb persona={p} size={16} glow="none" />
-                  {p.dynamic && domain ? `${p.name} (${domain})` : p.name}
+                  {p.name}
                 </span>
               ))}
             </div>
@@ -192,10 +194,14 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* 피드 */}
+      {/* 피드 — B-1 통찰: 렌더링은 PERSONA_MAP 조회. CastMember → Archetype 변환. */}
       <DebateFeed
         messages={messages}
-        thinkingPersona={thinkingPersona}
+        thinkingPersona={
+          thinkingPersona?.archetypeId
+            ? PERSONA_MAP[thinkingPersona.archetypeId] ?? null
+            : null
+        }
         emptyHint={
           status === 'idle'
             ? '"토론 시작"을 누르면 페르소나들이 첫 발언을 시작합니다.'
@@ -206,12 +212,29 @@ export default function SessionRoomPage() {
       {/* 사용자 개입 — 결론 완료/진행중에는 숨김 */}
       {status !== 'concluded' && status !== 'concluding' && (
         <UserInput
-          activePersonaIds={personaIds}
+          activePersonaIds={cast.map((m) => m.id)}
           domain={domain}
           disabled={status === 'error'}
           onSpeak={actions.injectUserMessage}
           onInstruct={actions.injectInstruction}
-          onAddPersona={actions.addPersona}
+          onAddPersona={(archetypeId) => {
+            // B-1 — UserInput "페르소나 추가" 는 아키타입 id 를 넘긴다.
+            // CastMember 로 변환해 addCastMember 호출. (B-2 에서 UserInput 자체를 리팩토링)
+            const arch = PERSONA_MAP[archetypeId];
+            if (!arch) return;
+            actions.addCastMember({
+              id: archetypeId,
+              source: 'archetype',
+              archetypeId,
+              name: arch.name,
+              role: arch.role,
+              temperament: arch.temperament,
+              stance: '',
+              colorFrom: arch.colorFrom,
+              colorTo: arch.colorTo,
+              isFacilitator: archetypeId === 'facilitator',
+            });
+          }}
         />
       )}
 

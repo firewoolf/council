@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
 import { isEditEnabled } from '@/lib/admin/github';
-import { BASE_PROMPT, OUTPUT_HINT } from '@/lib/prompts/base';
+import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '@/lib/prompts/base';
 
 import { PromptsEditForm } from './PromptsEditForm';
 
@@ -45,7 +45,13 @@ export default function AdminPromptsEditPage() {
           commit → Vercel 자동 재배포.
         </p>
       </div>
-      <PromptsEditForm initial={{ basePrompt: BASE_PROMPT, outputHint: OUTPUT_HINT }} />
+      <PromptsEditForm
+        initial={{
+          basePrompt: BASE_PROMPT,
+          outputHint: OUTPUT_HINT,
+          temperamentDirectives: TEMPERAMENT_DIRECTIVES,
+        }}
+      />
     </div>
   );
 }

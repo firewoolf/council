@@ -15,7 +15,7 @@ import { isAuthenticated } from '@/lib/admin/auth';
 import { commitFile, isEditEnabled } from '@/lib/admin/github';
 import { personaSchema } from '@/lib/admin/schemas';
 import currentPersonas from '@/data/personas.json';
-import type { Persona } from '@/types/persona';
+import type { Archetype as Persona } from '@/types/persona';
 
 export async function POST(request: Request) {
   if (!isAuthenticated()) {

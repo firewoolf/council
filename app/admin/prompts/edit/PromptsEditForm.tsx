@@ -79,6 +79,41 @@ export function PromptsEditForm({ initial }: Props) {
         )}
       </div>
 
+      <div className="space-y-3">
+        <div>
+          <Label>Temperament 지시 조각</Label>
+          <p className="text-xs text-text-muted">
+            각 페르소나의 기질(temperament)에 따라 합성 프롬프트에 삽입되는 한 단락.
+            5개 모두 채워야 합니다.
+          </p>
+        </div>
+        {(
+          [
+            ['advocate', '옹호가 (추진/실행)'],
+            ['critic', '비판가 (리스크/허점)'],
+            ['analyst', '분석가 (데이터/구조)'],
+            ['provocateur', '독설가 (도발/직설)'],
+            ['empath', '공감가 (사람/감정)'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="space-y-1.5">
+            <Label className="text-xs">
+              {label} <code className="font-mono text-[10px] text-text-muted">{key}</code>
+            </Label>
+            <Textarea
+              {...register(`temperamentDirectives.${key}` as const)}
+              rows={4}
+              className="font-mono text-xs leading-relaxed"
+            />
+            {errors.temperamentDirectives?.[key] && (
+              <p className="text-xs text-destructive">
+                {errors.temperamentDirectives[key]?.message}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
       <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-background/90 px-4 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-end">
         {commitInfo && (
           <a

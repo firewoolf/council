@@ -37,20 +37,20 @@ export default function AdminPersonaEditPage({ params }: Props) {
     );
   }
 
-  // Persona → PersonaInput (둘은 같은 shape이지만 타입 분리)
+  // Archetype → PersonaInput (둘은 같은 shape이지만 타입 분리)
   const initial: PersonaInput = {
     id: persona.id,
     name: persona.name,
     role: persona.role,
     coreValue: persona.coreValue,
     debateStyle: persona.debateStyle,
+    temperament: persona.temperament,
     nonNegotiable: persona.nonNegotiable,
     weakness: persona.weakness,
     systemPrompt: persona.systemPrompt,
     colorFrom: persona.colorFrom,
     colorTo: persona.colorTo,
     userQuestions: [...persona.userQuestions],
-    dynamic: persona.dynamic ?? false,
   };
 
   return (
