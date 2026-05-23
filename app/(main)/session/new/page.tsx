@@ -11,7 +11,12 @@ import { PersonaPicker } from '@/components/session/PersonaPicker';
 import { Button } from '@/components/ui/button';
 import { recommendPersonas } from '@/lib/ai/client';
 import { AiCallError } from '@/lib/ai/errors';
-import { BYOK_PROVIDERS, type AiProvider } from '@/lib/ai/providers';
+import {
+  BYOK_PROVIDERS,
+  listAvailableProviders,
+  pickProvider,
+  type AiProvider,
+} from '@/lib/ai/providers';
 import { showAiError } from '@/lib/ai/showAiError';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
@@ -53,7 +58,10 @@ export default function NewSessionPage() {
   const handleAnalyze = useCallback(
     async (text: string): Promise<void> => {
       const state = useApiKeyStore.getState();
-      const currentProvider = state.provider;
+      // Phase B 라우팅: 추천에는 'recommend' role 적합 공급사 (대개 gemini).
+      // 사용자가 등록한 키들 중에서만 고른다. 키 1개면 그 1개로 동작.
+      const available = listAvailableProviders(state.keys);
+      const currentProvider = pickProvider('recommend', available);
       const currentKey = currentProvider ? state.keys[currentProvider] : null;
       if (!currentProvider || !currentKey) {
         toast.error('API 키가 필요합니다. 설정 페이지에서 먼저 등록해주세요.');

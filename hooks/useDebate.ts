@@ -5,6 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DebateStatus } from '@/components/debate/DebateControls';
 import { generateConclusion, generateSpeech } from '@/lib/ai/client';
 import {
+  listAvailableProviders,
+  pickProvider,
+} from '@/lib/ai/providers';
+import {
   buildDebateContext,
   decideNextSpeaker,
 } from '@/lib/prompts/orchestrator';
@@ -88,8 +92,11 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const updatePersonaIds = useSessionsStore((s) => s.updatePersonaIds);
   const saveConclusion = useSessionsStore((s) => s.saveConclusion);
 
-  const { provider, getActiveKey } = useApiKeyStore();
-  const apiKey = getActiveKey();
+  // 라우팅 결정은 호출 시점에 useApiKeyStore.getState() 로 한다.
+  // 여기선 "키가 하나라도 있는지" 만 구독하면 충분 → 토론 중 키 변경 시 effect 재진입.
+  // (keys 객체 reference 가 바뀔 때만 재진입 — 빈번하지 않음.)
+  const keys = useApiKeyStore((s) => s.keys);
+  const hasAnyKey = Object.values(keys).some((k) => !!k);
 
   const safeMessages = useMemo<readonly Message[]>(
     () => messages ?? [],
@@ -122,7 +129,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   // ───────────────────────────── 메인 토론 루프
   useEffect(() => {
     if (status !== 'running') return;
-    if (!session || !apiKey || !provider) return;
+    if (!session || !hasAnyKey) return;
     if (activePersonas.length < 2) return;
     if (inFlightRef.current) return;
 
@@ -161,9 +168,22 @@ export function useDebate(sessionId: string): UseDebateReturn {
           PERSONA_MAP,
         );
 
+        // 호출 시점에 'debate' role 적합 공급사 선택 (Groq > Cerebras > … > 폴백)
+        const liveState = useApiKeyStore.getState();
+        const available = listAvailableProviders(liveState.keys);
+        const debateProvider = pickProvider('debate', available);
+        const debateKey = debateProvider ? liveState.keys[debateProvider] : null;
+        if (!debateProvider || !debateKey) {
+          if (!cancelled) {
+            setError('등록된 API 키가 없습니다.');
+            setStatus('error');
+          }
+          return;
+        }
+
         const speech = await generateSpeech({
-          provider,
-          apiKey,
+          provider: debateProvider,
+          apiKey: debateKey,
           system: systemPrompt,
           prompt: userPrompt,
         });
@@ -207,8 +227,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
     safeMessages,
     activePersonas,
     session,
-    apiKey,
-    provider,
+    hasAnyKey,
     domain,
     sessionId,
     appendMessage,
@@ -224,7 +243,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   //   2) cancelled flag + conclusion 존재 가드로 중복 저장 차단.
   useEffect(() => {
     if (status !== 'concluding') return;
-    if (!session || !apiKey || !provider) return;
+    if (!session || !hasAnyKey) return;
     if (conclusion) {
       // 이미 결론이 저장되어 있으면 상태만 동기화하고 끝
       setStatus('concluded');
@@ -235,9 +254,24 @@ export function useDebate(sessionId: string): UseDebateReturn {
     const handle = setTimeout(async () => {
       if (cancelled) return;
       try {
+        // 결론은 'conclude' role 적합 공급사 (Gemini > 폴백)
+        const liveState = useApiKeyStore.getState();
+        const available = listAvailableProviders(liveState.keys);
+        const concludeProvider = pickProvider('conclude', available);
+        const concludeKey = concludeProvider
+          ? liveState.keys[concludeProvider]
+          : null;
+        if (!concludeProvider || !concludeKey) {
+          if (!cancelled) {
+            setError('등록된 API 키가 없습니다.');
+            setStatus('error');
+          }
+          return;
+        }
+
         const result = await generateConclusion({
-          provider,
-          apiKey,
+          provider: concludeProvider,
+          apiKey: concludeKey,
           concern: session.concern,
           messages: safeMessages,
           personaMap: PERSONA_MAP,
@@ -259,8 +293,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   }, [
     status,
     session,
-    apiKey,
-    provider,
+    hasAnyKey,
     safeMessages,
     sessionId,
     saveConclusion,

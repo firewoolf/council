@@ -15,6 +15,14 @@ export type AiProvider =
   | 'cerebras'
   | 'claude';
 
+/**
+ * LLM 호출 작업 종류 — provider 라우팅에 사용.
+ * - recommend : 페르소나 추천 (세션당 1회, 복잡한 enum 스키마, 품질 우선)
+ * - debate    : 토론 발언 생성 (턴당 1회 × 20-30회, 속도·RPM 우선)
+ * - conclude  : 결론 생성 (세션당 1회, 4섹션 구조화 출력, 품질 우선)
+ */
+export type AiTaskRole = 'recommend' | 'debate' | 'conclude';
+
 export interface ProviderConfig {
   id: AiProvider;
   displayName: string;
@@ -32,6 +40,13 @@ export interface ProviderConfig {
   accent: { from: string; to: string };
   /** 무료 한도 한 줄 요약 */
   freeTier: string;
+  /**
+   * 이 provider 가 적합한 작업 목록.
+   * - 명시 시 해당 role에서만 우선 선택됨.
+   * - 비우면(undefined) "모든 작업 가능한 폴백 범용"으로 취급.
+   * 사용자가 키를 1개만 넣은 경우 라우팅은 무시되고 그 1개로 모두 처리.
+   */
+  roles?: AiTaskRole[];
 }
 
 export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
@@ -49,6 +64,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: true,
     accent: { from: '#4285F4', to: '#34A853' },
     freeTier: '분당 15회 / 일 1000회 무료 (Gemini 2.5 Flash-Lite 기준)',
+    // Gemini: 한국어·구조화 출력 안정 → 추천 + 결론에 강점
+    roles: ['recommend', 'conclude'],
   },
   groq: {
     id: 'groq',
@@ -62,6 +79,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: true,
     accent: { from: '#F55036', to: '#FF8A65' },
     freeTier: '분당 30회 / 일 14400회 무료 (Llama 3.3 70B 기준)',
+    // Groq: 초고속 + RPM 30 → 턴당 1회 호출되는 토론 발언에 최적
+    roles: ['debate'],
   },
   openrouter: {
     id: 'openrouter',
@@ -77,6 +96,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: true,
     accent: { from: '#6E40C9', to: '#A5A5FF' },
     freeTier: '무료 모델 일 50회 (크레딧 충전 시 1000회) / 분당 20회',
+    // OpenRouter: 폴백 범용 — roles 비워서 모든 작업 가능
+    // (다른 공급사가 한도 초과 시 어디든 받아주는 보조 풀)
   },
   cerebras: {
     id: 'cerebras',
@@ -93,6 +114,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: true,
     accent: { from: '#0F766E', to: '#5EEAD4' },
     freeTier: '분당 6만 토큰 / 일 약 1700회 (Llama 3.3 70B 기준)',
+    // Cerebras: 초고속 추론 → 토론 발언 (대안 debate provider)
+    roles: ['debate'],
   },
   claude: {
     id: 'claude',
@@ -111,6 +134,50 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
 /** 키 형식 1차 검증 (정규식만 — 실제 유효성은 ping API로 확인) */
 export function validateKeyFormat(provider: AiProvider, key: string): boolean {
   return PROVIDERS[provider].keyPattern.test(key.trim());
+}
+
+/**
+ * store/api-key.ts 의 keys 객체 → 키가 등록된 BYOK 공급사 배열.
+ * - BYOK_PROVIDERS 순서를 보존 (= 추천 순서).
+ * - claude 는 BYOK가 아니므로 자동 제외.
+ */
+export function listAvailableProviders(
+  keys: Partial<Record<AiProvider, string>>,
+): AiProvider[] {
+  return BYOK_PROVIDERS.filter((p) => !!keys[p]);
+}
+
+/**
+ * 작업 종류 + 사용 가능한 공급사 목록 → 적합한 공급사 1개 선택.
+ *
+ * 우선순위:
+ *   1) roles 에 명시적으로 매치되는 공급사 (전문 풀)
+ *   2) roles 가 undefined 인 폴백 범용 공급사 (예: openrouter)
+ *   3) 그래도 없으면 첫 번째 사용 가능 공급사 (= 라우팅 무시)
+ *
+ * 사용자가 키를 1개만 넣어도 그 1개로 모두 동작 — 라우팅은
+ * "여러 키가 있을 때의 최적화"일 뿐 강제가 아니다.
+ *
+ * @returns 선택된 공급사. available 이 비어있으면 null.
+ */
+export function pickProvider(
+  role: AiTaskRole,
+  available: readonly AiProvider[],
+): AiProvider | null {
+  if (available.length === 0) return null;
+
+  // 1순위: roles 매치
+  const specialist = available.find((p) =>
+    PROVIDERS[p].roles?.includes(role),
+  );
+  if (specialist) return specialist;
+
+  // 2순위: 폴백 범용 (roles undefined)
+  const generalist = available.find((p) => !PROVIDERS[p].roles);
+  if (generalist) return generalist;
+
+  // 3순위: 그냥 첫 번째
+  return available[0] ?? null;
 }
 
 /**
