@@ -10,6 +10,9 @@ import { ConcernInput } from '@/components/session/ConcernInput';
 import { PersonaPicker } from '@/components/session/PersonaPicker';
 import { Button } from '@/components/ui/button';
 import { recommendPersonas } from '@/lib/ai/client';
+import { AiCallError } from '@/lib/ai/errors';
+import { BYOK_PROVIDERS, type AiProvider } from '@/lib/ai/providers';
+import { showAiError } from '@/lib/ai/showAiError';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
@@ -29,7 +32,7 @@ type Step = 'input' | 'analyzing' | 'picking';
 export default function NewSessionPage() {
   const router = useRouter();
   const mounted = useHasMounted();
-  const { provider, getActiveKey } = useApiKeyStore();
+  const { provider, getActiveKey, setProvider } = useApiKeyStore();
   const createSession = useSessionsStore((s) => s.createSession);
 
   const [step, setStep] = useState<Step>('input');
@@ -42,9 +45,17 @@ export default function NewSessionPage() {
   const apiKey = getActiveKey();
   const hasKey = mounted && !!apiKey && !!provider;
 
+  /**
+   * 추천 호출 + 자동 fallback 흐름.
+   * 의존성을 setProvider 하나로 줄이기 위해, 호출 시점의 store 값을
+   * useApiKeyStore.getState() 로 읽는다 — fallback 후 즉시 재호출 시에도 최신 값 보장.
+   */
   const handleAnalyze = useCallback(
-    async (text: string) => {
-      if (!provider || !apiKey) {
+    async (text: string): Promise<void> => {
+      const state = useApiKeyStore.getState();
+      const currentProvider = state.provider;
+      const currentKey = currentProvider ? state.keys[currentProvider] : null;
+      if (!currentProvider || !currentKey) {
         toast.error('API 키가 필요합니다. 설정 페이지에서 먼저 등록해주세요.');
         return;
       }
@@ -53,21 +64,18 @@ export default function NewSessionPage() {
 
       try {
         const result = await recommendPersonas({
-          provider,
-          apiKey,
+          provider: currentProvider,
+          apiKey: currentKey,
           concern: text,
         });
 
-        // 추천 ID 유효성 필터링 — 모델이 가끔 엉뚱한 id를 만들 수 있음
         const recIds = result.recommended.map((r) => r.personaId);
         const reasonMap = Object.fromEntries(
           result.recommended.map((r) => [r.personaId, r.reason]),
         );
 
         // 사회자는 항상 자동 포함
-        const initialSelection = [
-          ...new Set([...recIds, FACILITATOR_ID]),
-        ];
+        const initialSelection = [...new Set([...recIds, FACILITATOR_ID])];
 
         setRecommendedIds(recIds);
         setReasons(reasonMap);
@@ -75,12 +83,28 @@ export default function NewSessionPage() {
         setSelectedIds(initialSelection);
         setStep('picking');
       } catch (err) {
-        const msg = err instanceof Error ? err.message : '알 수 없는 오류';
-        toast.error(`추천 실패: ${msg}`);
         setStep('input');
+        if (err instanceof AiCallError) {
+          // fallback 후보: 다른 BYOK 공급사 중 키 등록된 첫 번째
+          const altProvider: AiProvider | null =
+            BYOK_PROVIDERS.find(
+              (p) => p !== currentProvider && !!state.keys[p],
+            ) ?? null;
+          showAiError(err, {
+            alternateProvider: altProvider,
+            onSwitch: (target) => {
+              setProvider(target);
+              // setProvider 즉시 반영 → 다음 줄 getState 로 새 값 읽음
+              void handleAnalyze(text);
+            },
+          });
+        } else {
+          const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+          toast.error(`추천 실패: ${msg}`);
+        }
       }
     },
-    [provider, apiKey],
+    [setProvider],
   );
 
   const handleToggle = useCallback((personaId: string) => {

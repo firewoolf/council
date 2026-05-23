@@ -14,6 +14,8 @@ import {
   type AiProvider,
 } from '@/lib/ai/providers';
 import { testApiKey } from '@/lib/ai/client';
+import { AiCallError } from '@/lib/ai/errors';
+import { showAiError } from '@/lib/ai/showAiError';
 import { useApiKeyStore } from '@/store/api-key';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { cn } from '@/lib/utils';
@@ -53,22 +55,29 @@ export function ApiKeyForm() {
       </div>
 
       {/* 공급사 카드 — 추천 순으로 */}
-      {BYOK_PROVIDERS.map((p) => (
-        <ProviderCard
-          key={p}
-          provider={p}
-          selected={provider === p}
-          savedKey={keys[p] ?? ''}
-          testedAt={lastTestedAt[p]}
-          onSelect={() => setProvider(p)}
-          onSave={(key) => {
-            setKey(p, key);
-            setProvider(p);
-          }}
-          onClear={() => clearKey(p)}
-          onTested={() => markTested(p)}
-        />
-      ))}
+      {BYOK_PROVIDERS.map((p) => {
+        // 이 카드 실패 시 fallback 후보: 다른 BYOK 공급사 중 키가 있는 첫 번째
+        const alternate =
+          BYOK_PROVIDERS.find((other) => other !== p && !!keys[other]) ?? null;
+        return (
+          <ProviderCard
+            key={p}
+            provider={p}
+            selected={provider === p}
+            savedKey={keys[p] ?? ''}
+            testedAt={lastTestedAt[p]}
+            alternateProvider={alternate}
+            onSelect={() => setProvider(p)}
+            onSave={(key) => {
+              setKey(p, key);
+              setProvider(p);
+            }}
+            onClear={() => clearKey(p)}
+            onTested={() => markTested(p)}
+            onSwitchProvider={(target) => setProvider(target)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -78,10 +87,13 @@ interface ProviderCardProps {
   selected: boolean;
   savedKey: string;
   testedAt: string | undefined;
+  /** quota 에러 시 1-click 전환 후보 (다른 공급사 키 등록돼 있을 때만 non-null) */
+  alternateProvider: AiProvider | null;
   onSelect: () => void;
   onSave: (key: string) => void;
   onClear: () => void;
   onTested: () => void;
+  onSwitchProvider: (target: AiProvider) => void;
 }
 
 function ProviderCard({
@@ -89,10 +101,12 @@ function ProviderCard({
   selected,
   savedKey,
   testedAt,
+  alternateProvider,
   onSelect,
   onSave,
   onClear,
   onTested,
+  onSwitchProvider,
 }: ProviderCardProps) {
   const config = PROVIDERS[provider];
   const [draft, setDraft] = useState(savedKey);
@@ -112,12 +126,19 @@ function ProviderCard({
       const result = await testApiKey(provider, draft);
       onSave(draft);
       onTested();
+      const cachedNote = result.cached ? ' (캐시)' : '';
       toast.success(
-        `${config.displayName} 연결 성공 (${result.latencyMs}ms). BYOK 모드 활성화.`,
+        `${config.displayName} 연결 성공 (${result.latencyMs}ms${cachedNote}). BYOK 모드 활성화.`,
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '알 수 없는 오류';
-      toast.error(msg);
+      if (err instanceof AiCallError) {
+        showAiError(err, {
+          alternateProvider,
+          onSwitch: onSwitchProvider,
+        });
+      } else {
+        toast.error(err instanceof Error ? err.message : '알 수 없는 오류');
+      }
     } finally {
       setTesting(false);
     }

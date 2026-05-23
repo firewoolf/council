@@ -5,6 +5,9 @@
  * AI SDK + 사용자 키로 직접 LLM에 호출 → 서버 비용 $0.
  *
  * Anthropic은 CORS 불가라 여기 포함하지 않음. (서버용은 lib/ai/server.ts)
+ *
+ * 모든 함수는 실패 시 AiCallError 를 throw 한다.
+ * UI는 err.kind + err.provider 만 보고 적절히 분기하면 된다.
  */
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
@@ -25,6 +28,7 @@ import {
 import type { Message } from '@/types/debate';
 import type { Persona } from '@/types/persona';
 import { PROVIDERS, type AiProvider } from './providers';
+import { AiCallError, classifyAiError } from './errors';
 
 /**
  * 공급사 + 키 → AI SDK 모델 인스턴스 생성.
@@ -39,21 +43,43 @@ function getModel(provider: AiProvider, apiKey: string) {
       return createGroq({ apiKey })(config.modelId);
     case 'claude':
       // 브라우저에서는 호출 불가. 호출 시도 자체가 잘못된 경로.
-      throw new Error(
+      throw new AiCallError(
+        'unknown',
+        provider,
         'Claude는 브라우저에서 직접 호출할 수 없습니다. 서버 라우트를 사용하세요.',
+        'browser-direct-not-supported',
       );
   }
 }
 
 /**
+ * 키 ping 결과 캐시.
+ * - 키 단위로 5초 윈도우 유지 → 짧은 시간 내 반복 테스트가 RPM을 잠식하지 않도록.
+ * - 성공만 캐시. 실패는 매번 재시도 (사용자가 키를 바꿔서 재시도하는 경우 보호).
+ * - 모듈 메모리에만 존재 → 새로고침 시 초기화.
+ */
+const PING_TTL_MS = 5_000;
+const pingCache = new Map<string, { latencyMs: number; expiresAt: number }>();
+
+function pingCacheKey(provider: AiProvider, apiKey: string) {
+  return `${provider}::${apiKey}`;
+}
+
+/**
  * 키 유효성 ping.
  * 가장 가벼운 generateObject 호출로 빠르게 검증.
- * 성공: true / 실패: 에러 메시지 throw.
+ * 성공: { ok: true, latencyMs } / 실패: AiCallError throw
  */
 export async function testApiKey(
   provider: AiProvider,
   apiKey: string,
-): Promise<{ ok: true; latencyMs: number }> {
+): Promise<{ ok: true; latencyMs: number; cached: boolean }> {
+  const cacheKey = pingCacheKey(provider, apiKey);
+  const cached = pingCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { ok: true, latencyMs: cached.latencyMs, cached: true };
+  }
+
   const start = performance.now();
   try {
     const model = getModel(provider, apiKey);
@@ -64,22 +90,14 @@ export async function testApiKey(
         '시스템 연결 테스트입니다. {"ok": true} JSON 객체 하나만 반환하세요.',
       maxRetries: 0,
     });
-    return { ok: true, latencyMs: Math.round(performance.now() - start) };
+    const latencyMs = Math.round(performance.now() - start);
+    pingCache.set(cacheKey, {
+      latencyMs,
+      expiresAt: Date.now() + PING_TTL_MS,
+    });
+    return { ok: true, latencyMs, cached: false };
   } catch (err) {
-    // 에러 메시지 정규화 — UX에 그대로 노출되므로 친절하게
-    const message = err instanceof Error ? err.message : String(err);
-    if (/api[_ ]?key|invalid|unauthor|401|403/i.test(message)) {
-      throw new Error('API 키가 유효하지 않습니다. 다시 확인해주세요.');
-    }
-    if (/quota|rate|limit|429/i.test(message)) {
-      throw new Error(
-        '키는 유효하지만 호출 한도를 초과했습니다. 잠시 후 다시 시도하세요.',
-      );
-    }
-    if (/network|fetch|cors/i.test(message)) {
-      throw new Error('네트워크 오류입니다. 인터넷 연결을 확인하세요.');
-    }
-    throw new Error(`연결 실패: ${message}`);
+    throw classifyAiError(provider, err);
   }
 }
 
@@ -101,8 +119,6 @@ export type SpeechObject = z.infer<typeof speechSchema>;
 
 /**
  * 페르소나 한 명의 다음 발언 생성.
- * - system: 페르소나 시스템 프롬프트 (composePersonaPrompt 결과)
- * - prompt: 토론 컨텍스트 (buildDebateContext 결과)
  */
 export async function generateSpeech(args: {
   provider: AiProvider;
@@ -110,15 +126,19 @@ export async function generateSpeech(args: {
   system: string;
   prompt: string;
 }): Promise<SpeechObject> {
-  const model = getModel(args.provider, args.apiKey);
-  const { object } = await generateObject({
-    model,
-    schema: speechSchema,
-    system: args.system,
-    prompt: args.prompt,
-    maxRetries: 1,
-  });
-  return object;
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: speechSchema,
+      system: args.system,
+      prompt: args.prompt,
+      maxRetries: 1,
+    });
+    return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
 }
 
 /**
@@ -130,19 +150,22 @@ export async function recommendPersonas(args: {
   apiKey: string;
   concern: string;
 }): Promise<Recommendation> {
-  const model = getModel(args.provider, args.apiKey);
-  const { object } = await generateObject({
-    model,
-    schema: recommendationSchema,
-    prompt: buildRecommenderPrompt(args.concern),
-    maxRetries: 1,
-  });
-  return object;
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: recommendationSchema,
+      prompt: buildRecommenderPrompt(args.concern),
+      maxRetries: 1,
+    });
+    return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
 }
 
 /**
  * 토론 종료 시 결론 생성.
- * 전체 발언 히스토리를 받아서 4섹션 결론 객체 반환.
  */
 export async function generateConclusion(args: {
   provider: AiProvider;
@@ -151,12 +174,16 @@ export async function generateConclusion(args: {
   messages: readonly Message[];
   personaMap: Record<string, Persona>;
 }): Promise<Conclusion> {
-  const model = getModel(args.provider, args.apiKey);
-  const { object } = await generateObject({
-    model,
-    schema: conclusionSchema,
-    prompt: buildConclusionPrompt(args.concern, args.messages, args.personaMap),
-    maxRetries: 1,
-  });
-  return object;
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: conclusionSchema,
+      prompt: buildConclusionPrompt(args.concern, args.messages, args.personaMap),
+      maxRetries: 1,
+    });
+    return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
 }
