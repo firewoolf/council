@@ -7,13 +7,6 @@
 
 ## Active
 
-### B-2. 어드민 진입점 노출
-- **배경**: `/admin` 으로 직접 URL 입력해야만 접근 가능. 운영자 본인이 사용 동선을 외워야 함.
-- **할 일**:
-  - 메인 푸터에 작은 link (`isAdminEnabled()` 가 true일 때만 노출).
-  - 또는 `/settings` 페이지 하단에 "운영자만" 라벨로 노출.
-  - 일반 사용자 메뉴에 노출하지 않기 — 운영자만 알아보면 충분.
-
 ### B-3. 변경 이력 페이지 (`/admin/history`)
 - **배경**: 어드민 편집은 GitHub commit이 진실. UI에서는 마지막 commit 링크만 보이고, 누적 변경 로그를 한 화면에서 확인 못함.
 - **할 일**:
@@ -45,7 +38,12 @@
 
 ## Done
 
-### B-1. 토론 중 발언 생성에도 quota fallback 확장 (commits 2eebde3, c현재)
+### B-2. 어드민 진입점 노출 (commit 현재)
+- ✅ 메인 푸터에 작은 "운영자" 링크 추가 (`app/(main)/layout.tsx`).
+- ✅ `isAdminEnabled()` true 일 때만 노출 — 일반 사용자에게는 숨김.
+- 톤: 회색·작음(11px)·ShieldCheck 아이콘. 일반 푸터 정보 옆에 자연스럽게.
+
+### B-1. 토론 중 발언 생성에도 quota fallback 확장 (commits 2eebde3, cbd05cc)
 - ✅ Phase C `runWithFallback` 로 자동 처리. 토스트 액션 클릭 흐름 대신 "조용한 자동 폴백" 으로 정책 변경 (더 매끄러움).
 - ✅ 진행 중 메시지 손실 없음 — 실패한 턴만 재시도.
 - ✅ 폴백 발생 시 `onFallback` 콜백으로 사용자에게 `toast.info` 알림 ("Groq 한도 → Cerebras 로 자동 전환").
