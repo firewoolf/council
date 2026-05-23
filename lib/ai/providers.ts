@@ -36,12 +36,14 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     signupUrl: 'https://aistudio.google.com/apikey',
     signupGuide:
       'Google 계정 로그인 → "Create API key" 클릭 → 새 키 복사 (30초)',
-    modelId: 'gemini-2.0-flash-exp',
+    // gemini-2.0-flash-exp 는 무료 한도가 매우 박함 (RPM ~10, RPD ~250).
+    // gemini-2.5-flash-lite 는 stable + 한국어 품질 OK + RPD 여유 (~1000).
+    modelId: 'gemini-2.5-flash-lite',
     // AIzaSy로 시작하는 39자 키
     keyPattern: /^AIza[A-Za-z0-9_-]{35}$/,
     browserDirect: true,
     accent: { from: '#4285F4', to: '#34A853' },
-    freeTier: '분당 15회 / 일 1500회 무료 (Gemini 2.0 Flash 기준)',
+    freeTier: '분당 15회 / 일 1000회 무료 (Gemini 2.5 Flash-Lite 기준)',
   },
   groq: {
     id: 'groq',
