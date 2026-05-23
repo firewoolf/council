@@ -35,12 +35,21 @@ export interface RunWithFallbackOptions {
   onFallback?: (from: AiProvider, to: AiProvider) => void;
 }
 
+/**
+ * 호출 결과 + 실제 성공한 공급사.
+ * 호출자가 Session.aiProvider 메타데이터를 동기화할 수 있게 (D-1).
+ */
+export interface RunWithFallbackResult<T> {
+  result: T;
+  usedProvider: AiProvider;
+}
+
 export async function runWithFallback<T>(
   role: AiTaskRole,
   keys: Partial<Record<AiProvider, string>>,
   call: ProviderCall<T>,
   opts: RunWithFallbackOptions = {},
-): Promise<T> {
+): Promise<RunWithFallbackResult<T>> {
   const tried = new Set<AiProvider>();
   let lastErr: unknown;
 
@@ -56,7 +65,8 @@ export async function runWithFallback<T>(
     if (!apiKey) break;
 
     try {
-      return await call(provider, apiKey);
+      const result = await call(provider, apiKey);
+      return { result, usedProvider: provider };
     } catch (err) {
       lastErr = err;
       // quota 외 에러는 즉시 throw — 다른 공급사로 갈아탈 이유 없음

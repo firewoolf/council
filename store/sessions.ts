@@ -40,6 +40,14 @@ interface SessionsState {
 
   appendMessage: (sessionId: string, message: Message) => void;
   updatePersonaIds: (sessionId: string, personaIds: string[]) => void;
+  /**
+   * D-1: 토론 중 폴백이 발생해서 실제 사용 공급사가 바뀌었을 때.
+   * 기존 값과 같으면 no-op — 매 턴마다 호출돼도 zustand write 안 일어남.
+   */
+  updateSessionProvider: (
+    sessionId: string,
+    provider: Session['aiProvider'],
+  ) => void;
 
   /** 결론 저장 시 status를 concluded로 자동 전환 */
   saveConclusion: (sessionId: string, conclusion: Conclusion) => void;
@@ -124,6 +132,18 @@ export const useSessionsStore = create<SessionsState>()(
         set((s) => ({
           sessionPersonas: { ...s.sessionPersonas, [sessionId]: personaIds },
         })),
+
+      updateSessionProvider: (sessionId, provider) =>
+        set((s) => {
+          const current = s.sessions[sessionId];
+          if (!current || current.aiProvider === provider) return s;
+          return {
+            sessions: {
+              ...s.sessions,
+              [sessionId]: { ...current, aiProvider: provider },
+            },
+          };
+        }),
 
       concludeSession: (id) =>
         set((s) => {

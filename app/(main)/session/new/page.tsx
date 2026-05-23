@@ -73,14 +73,12 @@ export default function NewSessionPage() {
       try {
         // Phase B 라우팅 + Phase C 자동 폴백:
         // 'recommend' 적합 공급사로 시도 → quota면 다른 공급사로 1회 재시도.
-        const result = await runWithFallback(
+        const { result } = await runWithFallback(
           'recommend',
           state.keys,
           (provider, apiKey) =>
             recommendPersonas({ provider, apiKey, concern: text }),
         );
-        // 폴백이 발생했어도 사용자 경험상 마지막 성공한 공급사로 전환되는 게 자연스러움
-        // 단, 이 정보는 토스트 액션 흐름에서만 알려주고 강제 전환은 하지 않음.
 
         // B-4 안전망: 모델이 환각 id 또는 어드민 삭제 직후 stale id 를 줄 수 있다.
         // 알려진 id 만 통과시키고 부족분은 무작위 보충.

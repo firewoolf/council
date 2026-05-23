@@ -7,21 +7,17 @@
 
 ## Active
 
-### D-1. Session.aiProvider 동기화 정책
-- **배경**: Phase C 자동 폴백 도입 후, 토론 중 실제 사용 공급사가 세션 시작 시점과 달라질 수 있음. 그러나 `Session.aiProvider` 메타데이터는 시작 시점 그대로 — `/history` 카드 등에서 표시되는 라벨이 부정확.
-- **선택지**:
-  - (I) **마지막 성공 공급사로 갱신** — useDebate 가 호출 후 `updateSessionProvider(sessionId, provider)` 호출. 가장 직관적.
-  - (II) **시작 공급사 유지** — 메타데이터 의미는 "사용자가 의도한 공급사". 폴백 사실은 별도 필드 (`fallbackHistory`) 로 보존.
-  - (III) **별도 필드 추가** — `Session.lastUsedProvider` 신설, `aiProvider` 는 시작 표기용.
-- **결정 필요**: 사용자가 `/history` 에서 무엇을 보고 싶은지에 달림. 단순함 우선이면 (I).
-- **할 일** (옵션 I 기준):
-  - `store/sessions.ts` 에 `updateSessionProvider(id, provider)` 추가.
-  - useDebate 의 두 호출 (generateSpeech / generateConclusion) 성공 직후 호출.
-  - 단 매 턴마다 호출하면 zustand persist write가 과해짐 → 마지막 사용 공급사가 바뀐 경우에만 호출하는 가드 필요.
+(현재 active 항목 없음)
 
 ---
 
 ## Done
+
+### D-1. Session.aiProvider 동기화 (commit 현재) — 옵션 (I) 채택
+- ✅ `store/sessions.ts` 에 `updateSessionProvider(id, provider)` 추가. 기존 값과 같으면 no-op (zustand persist write 안 일어남).
+- ✅ `runWithFallback` 반환에 `usedProvider` 포함 (`RunWithFallbackResult<T>`). 호출자가 실제 성공한 공급사를 정확히 알 수 있게.
+- ✅ useDebate 가 generateSpeech / generateConclusion 성공 직후 `updateSessionProvider(sessionId, usedProvider)`.
+- 결정 근거: CLAUDE.md ❷ "단순함 우선". 운영자 본인용이라 fallbackHistory 같은 추가 필드는 과함. /history 라벨이 "실제 마지막 사용 공급사"를 보여주는 게 사실에 부합.
 
 ### B-3. 변경 이력 페이지 (commit 현재)
 - ✅ `lib/admin/github.ts` 에 `listCommits(path, perPage)` 추가. `next: { revalidate: 300 }` 로 5분 캐시 → GitHub rate limit (5000/h) 보호.

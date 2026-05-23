@@ -93,6 +93,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const appendMessage = useSessionsStore((s) => s.appendMessage);
   const updatePersonaIds = useSessionsStore((s) => s.updatePersonaIds);
   const saveConclusion = useSessionsStore((s) => s.saveConclusion);
+  const updateSessionProvider = useSessionsStore((s) => s.updateSessionProvider);
 
   // 라우팅 결정은 호출 시점에 useApiKeyStore.getState() 로 한다.
   // 여기선 "키가 하나라도 있는지" 만 구독하면 충분 → 토론 중 키 변경 시 effect 재진입.
@@ -173,7 +174,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
         // Phase B+C: 'debate' 적합 공급사로 시도, quota 시 다른 공급사로 자동 폴백.
         // 폴백 발생 시 사용자에게 짧은 알림 — 무슨 일이 일어났는지 알게.
         const liveKeys = useApiKeyStore.getState().keys;
-        const speech = await runWithFallback(
+        const { result: speech, usedProvider } = await runWithFallback(
           'debate',
           liveKeys,
           (provider, apiKey) =>
@@ -192,6 +193,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
             },
           },
         );
+        // D-1: 세션 메타데이터를 실제 사용 공급사와 동기화 (값이 같으면 store no-op)
+        updateSessionProvider(sessionId, usedProvider);
 
         if (cancelled) return;
 
@@ -243,6 +246,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
     domain,
     sessionId,
     appendMessage,
+    updateSessionProvider,
   ]);
 
   // ───────────────────────────── 결론 생성
@@ -268,7 +272,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
       try {
         // Phase B+C: 'conclude' 적합 공급사로 시도, quota 시 다른 공급사로 자동 폴백
         const liveKeys = useApiKeyStore.getState().keys;
-        const result = await runWithFallback(
+        const { result, usedProvider } = await runWithFallback(
           'conclude',
           liveKeys,
           (provider, apiKey) =>
@@ -289,6 +293,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
           },
         );
         if (cancelled) return;
+        // D-1: 결론 단계도 메타데이터 동기화
+        updateSessionProvider(sessionId, usedProvider);
         saveConclusion(sessionId, result);
         setStatus('concluded');
       } catch (err) {
@@ -314,6 +320,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
     safeMessages,
     sessionId,
     saveConclusion,
+    updateSessionProvider,
     conclusion,
   ]);
 
