@@ -18,6 +18,10 @@ import {
 } from '@/lib/ai/providers';
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
+import {
+  sanitizeRecommendedIds,
+  sanitizeSelectedIds,
+} from '@/lib/persona-safety';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
@@ -78,15 +82,27 @@ export default function NewSessionPage() {
         // 폴백이 발생했어도 사용자 경험상 마지막 성공한 공급사로 전환되는 게 자연스러움
         // 단, 이 정보는 토스트 액션 흐름에서만 알려주고 강제 전환은 하지 않음.
 
-        const recIds = result.recommended.map((r) => r.personaId);
+        // B-4 안전망: 모델이 환각 id 또는 어드민 삭제 직후 stale id 를 줄 수 있다.
+        // 알려진 id 만 통과시키고 부족분은 무작위 보충.
+        const rawIds = result.recommended.map((r) => r.personaId);
+        const safe = sanitizeRecommendedIds(rawIds);
+        if (safe.dropped.length > 0) {
+          toast.info(
+            `삭제됐거나 알 수 없는 페르소나 ${safe.dropped.length}명 → 다른 페르소나로 대체`,
+            { duration: 5_000 },
+          );
+        }
+        // reasonMap 도 정리 — drop 된 id 는 reason 도 함께 제거. filled 된 id 는 reason 없음.
         const reasonMap = Object.fromEntries(
-          result.recommended.map((r) => [r.personaId, r.reason]),
+          result.recommended
+            .filter((r) => safe.ids.includes(r.personaId))
+            .map((r) => [r.personaId, r.reason]),
         );
 
         // 사회자는 항상 자동 포함
-        const initialSelection = [...new Set([...recIds, FACILITATOR_ID])];
+        const initialSelection = [...new Set([...safe.ids, FACILITATOR_ID])];
 
-        setRecommendedIds(recIds);
+        setRecommendedIds(safe.ids);
         setReasons(reasonMap);
         setDomain(result.detectedDomain ?? null);
         setSelectedIds(initialSelection);
@@ -134,13 +150,21 @@ export default function NewSessionPage() {
       toast.error('AI 공급사가 선택되지 않았습니다.');
       return;
     }
-    if (selectedIds.length < 2) {
+    // B-4 마지막 가드: picking 단계에 있던 사이 운영자가 페르소나를 삭제했을 수 있다.
+    const safe = sanitizeSelectedIds(selectedIds);
+    if (safe.dropped.length > 0) {
+      toast.info(
+        `선택했던 페르소나 중 ${safe.dropped.length}명이 더 이상 존재하지 않아 제외했습니다.`,
+        { duration: 5_000 },
+      );
+    }
+    if (safe.ids.length < 2) {
       toast.error('최소 2명 이상 선택해주세요.');
       return;
     }
     const session = createSession({
       concern,
-      personaIds: selectedIds,
+      personaIds: safe.ids,
       aiProvider: provider,
       domain,
     });

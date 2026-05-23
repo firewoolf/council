@@ -15,13 +15,6 @@
   - 각 commit의 SHA, 메시지, 시각, 변경 파일 표시 + GitHub 링크.
   - 캐시는 5분 정도 (rate limit 보호).
 
-### B-4. 추천 로직의 페르소나 fallback
-- **배경**: 어드민이 페르소나를 삭제했을 때, 모델이 추천한 `personaId` 가 더 이상 존재하지 않으면 `PERSONA_MAP[id]` 가 undefined 가 돼 회의 시작이 깨질 수 있음.
-- **할 일**:
-  - `recommendPersonas` 응답을 받자마자 `PERSONAS` 와 cross-check.
-  - 없는 id 는 silently drop + 부족분은 random sample 로 보충.
-  - 또는 추천 프롬프트에 현재 페르소나 ID 목록을 명시적으로 주입해 모델이 임의 id 생성 못하게.
-
 ### D-1. Session.aiProvider 동기화 정책
 - **배경**: Phase C 자동 폴백 도입 후, 토론 중 실제 사용 공급사가 세션 시작 시점과 달라질 수 있음. 그러나 `Session.aiProvider` 메타데이터는 시작 시점 그대로 — `/history` 카드 등에서 표시되는 라벨이 부정확.
 - **선택지**:
@@ -38,7 +31,15 @@
 
 ## Done
 
-### B-2. 어드민 진입점 노출 (commit 현재)
+### B-4. 추천 로직의 페르소나 fallback (commit 현재)
+- ✅ 이미 처리돼 있던 것: `personaIdSchema = z.enum(PERSONAS.map(p=>p.id))` — Zod가 환각 id를 generateObject 단에서 차단. 빌드 시점에 PERSONAS와 동기화.
+- ✅ 이미 처리돼 있던 것: `PERSONA_CATALOG` — 추천 프롬프트에 현재 페르소나 목록을 명시 주입.
+- ✅ 추가: `lib/persona-safety.ts` — 추천 응답·선택 ids 두 지점에서 stale id 가드.
+  - `sanitizeRecommendedIds`: unknown drop + 부족분 무작위 보충 (facilitator/domain-expert 제외)
+  - `sanitizeSelectedIds`: handleStart 직전 마지막 검증
+  - 보충·드롭 발생 시 `toast.info` 로 사용자 안내
+
+### B-2. 어드민 진입점 노출 (commit d7d799c)
 - ✅ 메인 푸터에 작은 "운영자" 링크 추가 (`app/(main)/layout.tsx`).
 - ✅ `isAdminEnabled()` true 일 때만 노출 — 일반 사용자에게는 숨김.
 - 톤: 회색·작음(11px)·ShieldCheck 아이콘. 일반 푸터 정보 옆에 자연스럽게.
