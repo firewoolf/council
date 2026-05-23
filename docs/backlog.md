@@ -7,14 +7,6 @@
 
 ## Active
 
-### B-3. 변경 이력 페이지 (`/admin/history`)
-- **배경**: 어드민 편집은 GitHub commit이 진실. UI에서는 마지막 commit 링크만 보이고, 누적 변경 로그를 한 화면에서 확인 못함.
-- **할 일**:
-  - `/admin/history` 서버 페이지.
-  - GitHub Commits API (`/repos/{owner}/{repo}/commits?path=data/personas.json`) 로 페이지네이션.
-  - 각 commit의 SHA, 메시지, 시각, 변경 파일 표시 + GitHub 링크.
-  - 캐시는 5분 정도 (rate limit 보호).
-
 ### D-1. Session.aiProvider 동기화 정책
 - **배경**: Phase C 자동 폴백 도입 후, 토론 중 실제 사용 공급사가 세션 시작 시점과 달라질 수 있음. 그러나 `Session.aiProvider` 메타데이터는 시작 시점 그대로 — `/history` 카드 등에서 표시되는 라벨이 부정확.
 - **선택지**:
@@ -31,7 +23,13 @@
 
 ## Done
 
-### B-4. 추천 로직의 페르소나 fallback (commit 현재)
+### B-3. 변경 이력 페이지 (commit 현재)
+- ✅ `lib/admin/github.ts` 에 `listCommits(path, perPage)` 추가. `next: { revalidate: 300 }` 로 5분 캐시 → GitHub rate limit (5000/h) 보호.
+- ✅ `/admin/history` 서버 페이지. `data/personas.json` + `data/prompts.json` 두 path 의 commit 을 합쳐 시간 역순 최근 50개 표시.
+- ✅ 각 commit: SHA(short), 메시지(title+body), 시각, 작성자, 어느 파일 변경인지 라벨, GitHub 링크.
+- ✅ 어드민 대시보드(`/admin`)에 변경 이력 카드 추가 (isEditEnabled() 가드).
+
+### B-4. 추천 로직의 페르소나 fallback (commit 99d86b6)
 - ✅ 이미 처리돼 있던 것: `personaIdSchema = z.enum(PERSONAS.map(p=>p.id))` — Zod가 환각 id를 generateObject 단에서 차단. 빌드 시점에 PERSONAS와 동기화.
 - ✅ 이미 처리돼 있던 것: `PERSONA_CATALOG` — 추천 프롬프트에 현재 페르소나 목록을 명시 주입.
 - ✅ 추가: `lib/persona-safety.ts` — 추천 응답·선택 ids 두 지점에서 stale id 가드.

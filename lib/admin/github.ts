@@ -132,3 +132,63 @@ export async function commitFile(
     commitUrl: json.commit.html_url,
   };
 }
+
+/**
+ * 특정 path 의 커밋 이력 조회.
+ * @param path     레포 루트 기준 (예: "data/personas.json")
+ * @param perPage  한 페이지 갯수 (기본 30, 최대 100)
+ *
+ * GET /repos/{owner}/{repo}/commits?path=...&sha=<branch>&per_page=...
+ */
+export async function listCommits(
+  path: string,
+  perPage = 30,
+): Promise<CommitSummary[]> {
+  const { owner, repo, branch } = getRepoConfig();
+  const url =
+    `${API_BASE}/repos/${owner}/${repo}/commits` +
+    `?path=${encodeURIComponent(path)}&sha=${branch}&per_page=${perPage}`;
+
+  const res = await fetch(url, {
+    headers: getAuthHeaders(),
+    // 서버 컴포넌트가 5분 캐시로 호출 — rate limit (5000/h) 보호
+    next: { revalidate: 300 },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new GitHubError(
+      `commits 조회 실패 (${res.status}): ${text.slice(0, 200)}`,
+      res.status,
+    );
+  }
+
+  const arr = (await res.json()) as Array<{
+    sha: string;
+    html_url: string;
+    commit: {
+      message: string;
+      author: { name: string; date: string };
+    };
+  }>;
+
+  return arr.map((c) => ({
+    sha: c.sha,
+    shortSha: c.sha.slice(0, 7),
+    url: c.html_url,
+    message: c.commit.message,
+    author: c.commit.author.name,
+    date: c.commit.author.date,
+    path,
+  }));
+}
+
+export interface CommitSummary {
+  sha: string;
+  shortSha: string;
+  url: string;
+  message: string;
+  author: string;
+  date: string;
+  path: string;
+}

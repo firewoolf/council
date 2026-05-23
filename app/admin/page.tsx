@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, FileText, Users } from 'lucide-react';
+import { ArrowRight, FileText, History, Users } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
+import { isEditEnabled } from '@/lib/admin/github';
 import { PERSONAS } from '@/lib/prompts/personas';
 import { LogoutButton } from './_components/LogoutButton';
 
@@ -46,6 +47,15 @@ export default function AdminDashboardPage() {
           meta="굴복 금지 규칙 / 출력 가이드"
           description="모든 페르소나에 공통 적용되는 베이스 프롬프트와 출력 가이드를 관리합니다."
         />
+        {isEditEnabled() && (
+          <AdminCard
+            href="/admin/history"
+            icon={<History className="size-5 text-primary" />}
+            title="변경 이력"
+            meta="GitHub commit 로그"
+            description="data/personas.json · data/prompts.json 의 최근 변경 이력을 한 화면에서 확인합니다."
+          />
+        )}
       </div>
     </div>
   );
