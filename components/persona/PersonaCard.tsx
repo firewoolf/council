@@ -10,8 +10,13 @@ interface PersonaCardProps {
   persona: Persona;
   /** 회의에 참여 중인 상태 */
   selected: boolean;
-  /** 추천 받은 페르소나일 때 AI가 준 사유 */
+  /** 추천 받은 페르소나일 때 AI가 준 사유 (왜 이 사람이 필요한가) */
   recommendReason?: string;
+  /**
+   * Phase A — 이 페르소나가 이 고민에서 취하는 입장 한 줄.
+   * 추천된 3명에게만 있고 풀에서 추가한 페르소나는 없음(중립).
+   */
+  stance?: string;
   /** 도메인 전문가일 때 동적으로 주입된 분야명 */
   domain?: string | null;
   onToggle: (personaId: string) => void;
@@ -29,6 +34,7 @@ export function PersonaCard({
   persona,
   selected,
   recommendReason,
+  stance,
   domain,
   onToggle,
   disabled,
@@ -96,6 +102,18 @@ export function PersonaCard({
           >
             <span className="mr-1 font-medium text-primary">추천</span>
             {recommendReason}
+          </p>
+        )}
+
+        {stance && (
+          <p
+            className={cn(
+              'line-clamp-2 rounded-md border-l-2 border-accent/60 bg-accent/10 px-2 py-1 text-xs leading-relaxed',
+              'text-text/90',
+            )}
+          >
+            <span className="mr-1 font-semibold text-accent">입장</span>
+            {stance}
           </p>
         )}
       </div>

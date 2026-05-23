@@ -48,6 +48,9 @@ interface UseDebateReturn {
 
 const TURN_DELAY_MS = 900;
 const FIRST_TURN_DELAY_MS = 250;
+// 모듈 레벨 const — 매번 새 `{}` 반환하면 zustand 셀렉터가 매 렌더 신규 객체로 보고
+// 무한 재구독을 트리거한다. reference equality 유지 필수.
+const EMPTY_STANCES: Record<string, string> = Object.freeze({});
 
 function generateMessageId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -90,6 +93,10 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const messages = useSessionsStore((s) => s.messages[sessionId]);
   const domain = useSessionsStore((s) => s.domains[sessionId] ?? null);
   const conclusion = useSessionsStore((s) => s.conclusions[sessionId]);
+  // Phase A — 세션별 stance. 마이그레이션 전 세션은 sessionStances 자체가 undefined.
+  const stances = useSessionsStore(
+    (s) => s.sessionStances?.[sessionId] ?? EMPTY_STANCES,
+  );
   const appendMessage = useSessionsStore((s) => s.appendMessage);
   const updatePersonaIds = useSessionsStore((s) => s.updatePersonaIds);
   const saveConclusion = useSessionsStore((s) => s.saveConclusion);
@@ -164,6 +171,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
         const systemPrompt = composePersonaPrompt(speaker, {
           domain: domain ?? undefined,
           concern: session.concern,
+          stance: stances[speaker.id] ?? '',
         });
         const userPrompt = buildDebateContext(
           session.concern,
@@ -244,6 +252,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
     session,
     hasAnyKey,
     domain,
+    stances,
     sessionId,
     appendMessage,
     updateSessionProvider,

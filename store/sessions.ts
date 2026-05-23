@@ -20,6 +20,12 @@ import type { Message, Session } from '@/types/debate';
 interface SessionsState {
   sessions: Record<string, Session>;
   sessionPersonas: Record<string, string[]>;
+  /**
+   * Phase A — 세션별 페르소나 입장 매핑 (personaId → stance 한 줄).
+   * 추천된 3명에게만 들어있고, 풀에서 수동 추가된 페르소나는 stance 없음(중립).
+   * 가산적 필드 — 기존 LocalStorage 세션은 이 필드 없이 저장돼 있고, 셀렉터는 항상 `?? {}` 가드.
+   */
+  sessionStances: Record<string, Record<string, string>>;
   messages: Record<string, Message[]>;
   domains: Record<string, string | null>;
   conclusions: Record<string, Conclusion>;
@@ -30,6 +36,8 @@ interface SessionsState {
     personaIds: string[];
     aiProvider: Session['aiProvider'];
     domain?: string | null;
+    /** Phase A — personaId → stance 한 줄. 빈 객체면 모든 페르소나가 중립. */
+    stances?: Record<string, string>;
   }) => Session;
 
   getSession: (id: string) => Session | undefined;
@@ -37,6 +45,8 @@ interface SessionsState {
   getDomain: (id: string) => string | null;
   getMessages: (id: string) => Message[];
   getConclusion: (id: string) => Conclusion | null;
+  /** Phase A — personaId → stance. 없는 세션은 빈 객체. */
+  getStances: (id: string) => Record<string, string>;
 
   appendMessage: (sessionId: string, message: Message) => void;
   updatePersonaIds: (sessionId: string, personaIds: string[]) => void;
@@ -78,11 +88,19 @@ export const useSessionsStore = create<SessionsState>()(
     (set, get) => ({
       sessions: {},
       sessionPersonas: {},
+      sessionStances: {},
       messages: {},
       domains: {},
       conclusions: {},
 
-      createSession: ({ concern, title, personaIds, aiProvider, domain }) => {
+      createSession: ({
+        concern,
+        title,
+        personaIds,
+        aiProvider,
+        domain,
+        stances,
+      }) => {
         const id = generateId();
         const session: Session = {
           id,
@@ -96,6 +114,7 @@ export const useSessionsStore = create<SessionsState>()(
         set((s) => ({
           sessions: { ...s.sessions, [id]: session },
           sessionPersonas: { ...s.sessionPersonas, [id]: personaIds },
+          sessionStances: { ...s.sessionStances, [id]: stances ?? {} },
           messages: { ...s.messages, [id]: [] },
           domains: { ...s.domains, [id]: domain ?? null },
         }));
@@ -108,6 +127,8 @@ export const useSessionsStore = create<SessionsState>()(
       getDomain: (id) => get().domains[id] ?? null,
       getMessages: (id) => get().messages[id] ?? [],
       getConclusion: (id) => get().conclusions[id] ?? null,
+      // sessionStances 자체가 undefined 인 마이그레이션 전 세션도 안전
+      getStances: (id) => get().sessionStances?.[id] ?? {},
 
       saveConclusion: (sessionId, conclusion) =>
         set((s) => {
@@ -163,6 +184,8 @@ export const useSessionsStore = create<SessionsState>()(
           delete nextSessions[id];
           const nextPersonas = { ...s.sessionPersonas };
           delete nextPersonas[id];
+          const nextStances = { ...(s.sessionStances ?? {}) };
+          delete nextStances[id];
           const nextMessages = { ...s.messages };
           delete nextMessages[id];
           const nextDomains = { ...s.domains };
@@ -172,6 +195,7 @@ export const useSessionsStore = create<SessionsState>()(
           return {
             sessions: nextSessions,
             sessionPersonas: nextPersonas,
+            sessionStances: nextStances,
             messages: nextMessages,
             domains: nextDomains,
             conclusions: nextConclusions,

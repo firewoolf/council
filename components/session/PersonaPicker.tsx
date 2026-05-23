@@ -15,6 +15,11 @@ interface PersonaPickerProps {
   recommendedIds: string[];
   /** personaId → 추천 사유 매핑 */
   reasons: Record<string, string>;
+  /**
+   * Phase A — personaId → 추천기가 배정한 입장(한 줄).
+   * 추천된 3명에게만 들어있다. 풀에서 추가한 페르소나는 없음(중립).
+   */
+  stances: Record<string, string>;
   /** 동적 분야 (도메인 전문가용) */
   domain: string | null;
   /** 현재 선택된 personaId 목록 (사회자 포함) */
@@ -40,6 +45,7 @@ const FACILITATOR_ID = 'facilitator';
 export function PersonaPicker({
   recommendedIds,
   reasons,
+  stances,
   domain,
   selectedIds,
   onToggle,
@@ -104,6 +110,7 @@ export function PersonaPicker({
               persona={p}
               selected={selectedSet.has(p.id)}
               recommendReason={reasons[p.id]}
+              stance={stances[p.id]}
               domain={p.dynamic ? domain : undefined}
               onToggle={onToggle}
             />

@@ -47,6 +47,8 @@ export default function NewSessionPage() {
   const [step, setStep] = useState<Step>('input');
   const [concern, setConcern] = useState('');
   const [recommendedIds, setRecommendedIds] = useState<string[]>([]);
+  // Phase A — 추천기가 배정한 personaId → stance. 회의 시작 시 createSession 에 전달.
+  const [stances, setStances] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [domain, setDomain] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -90,11 +92,16 @@ export default function NewSessionPage() {
             { duration: 5_000 },
           );
         }
-        // reasonMap 도 정리 — drop 된 id 는 reason 도 함께 제거. filled 된 id 는 reason 없음.
+        // reasonMap + stanceMap 도 정리 — drop 된 id 는 함께 제거.
+        // filled 된 id 는 stance/reason 없음(중립). 토론 시 stance 빈 문자열로 처리됨.
+        const survivingRecs = result.recommended.filter((r) =>
+          safe.ids.includes(r.personaId),
+        );
         const reasonMap = Object.fromEntries(
-          result.recommended
-            .filter((r) => safe.ids.includes(r.personaId))
-            .map((r) => [r.personaId, r.reason]),
+          survivingRecs.map((r) => [r.personaId, r.reason]),
+        );
+        const stanceMap = Object.fromEntries(
+          survivingRecs.map((r) => [r.personaId, r.stance]),
         );
 
         // 사회자는 항상 자동 포함
@@ -102,6 +109,7 @@ export default function NewSessionPage() {
 
         setRecommendedIds(safe.ids);
         setReasons(reasonMap);
+        setStances(stanceMap);
         setDomain(result.detectedDomain ?? null);
         setSelectedIds(initialSelection);
         setStep('picking');
@@ -160,14 +168,20 @@ export default function NewSessionPage() {
       toast.error('최소 2명 이상 선택해주세요.');
       return;
     }
+    // Phase A — 선택된 personaIds 중에서만 stance 추출 (사회자/풀에서 추가된 페르소나는 자연히 제외).
+    const filteredStances: Record<string, string> = {};
+    for (const id of safe.ids) {
+      if (stances[id]) filteredStances[id] = stances[id];
+    }
     const session = createSession({
       concern,
       personaIds: safe.ids,
       aiProvider: provider,
       domain,
+      stances: filteredStances,
     });
     router.push(`/session/${session.id}`);
-  }, [provider, selectedIds, concern, domain, createSession, router]);
+  }, [provider, selectedIds, concern, domain, stances, createSession, router]);
 
   // 마운트 전: 깜빡임 방지용 빈 컨테이너
   if (!mounted) {
@@ -216,6 +230,7 @@ export default function NewSessionPage() {
         <PersonaPicker
           recommendedIds={recommendedIds}
           reasons={reasons}
+          stances={stances}
           domain={domain}
           selectedIds={selectedIds}
           onToggle={handleToggle}

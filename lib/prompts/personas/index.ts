@@ -22,13 +22,15 @@ export const PERSONA_MAP: Record<string, Persona> = Object.fromEntries(
 
 /**
  * 페르소나 1명의 최종 시스템 프롬프트 합성.
- * BASE_PROMPT + 캐릭터 프롬프트 + 출력 가이드.
+ * BASE_PROMPT + 캐릭터 프롬프트 + (Phase A) 입장 블록 + 고민 + 출력 가이드.
  *
  * 도메인 전문가(dynamic)는 domain 인자를 넘겨 분야를 주입한다.
+ * stance 는 추천기가 이 페르소나에게 배정한 "이 고민에서의 주장".
+ * 빈 문자열이면 stance 블록을 생략 — 풀에서 수동 추가된 페르소나는 중립으로 행동.
  */
 export function composePersonaPrompt(
   persona: Persona,
-  context?: { domain?: string; concern?: string },
+  context?: { domain?: string; concern?: string; stance?: string },
 ): string {
   const characterPrompt = persona.dynamic && context?.domain
     ? persona.systemPrompt.replace(
@@ -36,6 +38,13 @@ export function composePersonaPrompt(
         `당신의 구체적 분야는 [${context.domain}] 입니다.`,
       )
     : persona.systemPrompt;
+
+  // Phase A — stance 블록. 사용자 굴복 금지 규칙과 별개로,
+  // "이 고민에 대해 배정된 입장을 견지하라" 는 토론용 내적 일관성 규칙.
+  const stanceBlock =
+    context?.stance && context.stance.trim().length > 0
+      ? `\n\n[이 회의에서 당신의 입장]\n${context.stance}\n\n이 입장을 토론 내내 일관되게 견지하십시오. 다른 페르소나의 반박에 논리적으로 밀리면 부분 인정은 가능하나, 핵심 입장은 끝까지 지킵니다.`
+      : '';
 
   const concernBlock = context?.concern
     ? `\n\n[사용자의 고민]\n${context.concern}`
@@ -45,6 +54,7 @@ export function composePersonaPrompt(
     BASE_PROMPT,
     `\n[당신의 캐릭터]\n당신의 이름은 "${persona.name}" 입니다.\n`,
     characterPrompt,
+    stanceBlock,
     concernBlock,
     `\n\n${OUTPUT_HINT}`,
   ].join('\n');

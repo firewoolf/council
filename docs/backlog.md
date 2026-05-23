@@ -13,7 +13,19 @@
 
 ## Done
 
-### E-1. ADMIN_PASSWORD 미설정 시 /admin/login 안내 (commit 현재)
+### 트랙① Phase A — stance 도입 (commit 현재)
+워크오더 `docs/workorder-persona-A-stance.md` 기반.
+- ✅ `recommendationSchema.recommended` 에 `stance: string` 추가. enum personaId 유지(고정 10명).
+- ✅ `buildRecommenderPrompt` 에 "추진/반대/제3 각도로 입장 갈리게" 강제 지시.
+- ✅ `store/sessions.ts`: `sessionStances` 가산 필드 + `createSession({ stances })` + `getStances()` + `deleteSession` 정리. zustand persist version 동결 → 기존 LocalStorage 호환.
+- ✅ `composePersonaPrompt({ stance })` — 빈 문자열이면 블록 생략. "입장을 견지하라" 블록 삽입 (사용자 굴복 금지와 별개 — 페르소나 간 토론용 내적 일관성).
+- ✅ `useDebate`: store 에서 stances 구독, 호출 시 `stances[speaker.id] ?? ''` 전달. `EMPTY_STANCES` 모듈 const 로 reference 안정성 확보.
+- ✅ `session/new/page.tsx`: 추천 응답 → stanceMap 추출 → state 보관 → `handleStart` 에서 createSession 에 전달. 풀에서 추가한 페르소나는 stance 없음(중립) — 정상.
+- ✅ `PersonaCard` + `PersonaPicker`: 추천 카드에 "입장: ___" 한 줄 표시 (accent 색, 추천 사유 칩과 구분).
+
+Phase B (CastMember 모델·동적 생성·temperament 등)는 Opus가 별도 워크오더로 작성 — A와 묶지 않음.
+
+### E-1. ADMIN_PASSWORD 미설정 시 /admin/login 안내 (commit 7b490a2)
 - ✅ `app/admin/login/page.tsx` 를 server component 로 변환 + 비활성 상태면 안내 카드, 활성이면 client `LoginFormBoundary` 렌더.
 - ✅ `LoginForm + LoginShell` 을 `LoginForm.tsx` 로 분리. 'use client' 격리.
 - 효과: ADMIN_PASSWORD 없는 환경에서 `/admin` 직접 접근 시 빈 폼 대신 명시적 비활성 안내 + GITHUB_TOKEN/REPO 함께 설정 가이드.
