@@ -7,7 +7,7 @@ import { isEditEnabled } from '@/lib/admin/github';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import type { PersonaInput } from '@/lib/admin/schemas';
 
-import { PersonaEditForm } from './PersonaEditForm';
+import { PersonaForm } from '@/components/admin/PersonaForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +69,7 @@ export default function AdminPersonaEditPage({ params }: Props) {
           commit → Vercel 자동 재배포 (약 1~2분).
         </p>
       </div>
-      <PersonaEditForm initial={initial} />
+      <PersonaForm initial={initial} mode="edit" />
     </div>
   );
 }

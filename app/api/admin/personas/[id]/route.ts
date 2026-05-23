@@ -86,3 +86,62 @@ export async function PUT(
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+/**
+ * 페르소나 삭제.
+ * DELETE /api/admin/personas/[id]
+ *
+ * 안전장치:
+ *   - 최소 1명은 남겨야 함 (모두 삭제 시 회의가 불가능해짐)
+ *   - 추천 로직에 등록된 id 가 사라지면 fallback 필요 — 어드민 책임
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: { id: string } },
+) {
+  if (!isAuthenticated()) {
+    return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+  }
+  if (!isEditEnabled()) {
+    return NextResponse.json(
+      { error: '편집 기능이 비활성화되어 있습니다.' },
+      { status: 503 },
+    );
+  }
+
+  const personas = currentPersonas as Persona[];
+  const target = personas.find((p) => p.id === params.id);
+  if (!target) {
+    return NextResponse.json(
+      { error: `id="${params.id}" 페르소나를 찾을 수 없습니다.` },
+      { status: 404 },
+    );
+  }
+
+  if (personas.length <= 1) {
+    return NextResponse.json(
+      { error: '최소 1명의 페르소나는 남겨두어야 합니다.' },
+      { status: 400 },
+    );
+  }
+
+  const next = personas.filter((p) => p.id !== params.id);
+  const fileContent = JSON.stringify(next, null, 2) + '\n';
+
+  try {
+    const result = await commitFile(
+      'data/personas.json',
+      fileContent,
+      `chore(admin): remove persona "${target.name}" (${target.id})`,
+    );
+    return NextResponse.json({
+      ok: true,
+      commitSha: result.commitSha,
+      commitUrl: result.commitUrl,
+      note: '약 1~2분 후 Vercel 재배포가 완료되면 변경사항이 반영됩니다.',
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'commit 실패';
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}

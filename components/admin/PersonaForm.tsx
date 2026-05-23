@@ -29,9 +29,14 @@ const DEBATE_STYLES: Array<{ value: PersonaInput['debateStyle']; label: string }
 
 interface Props {
   initial: PersonaInput;
+  /**
+   * - 'edit'  : 기존 페르소나 수정. id는 잠금. PUT /api/admin/personas/[id]
+   * - 'create': 새 페르소나 생성. id는 입력 필요. POST /api/admin/personas
+   */
+  mode: 'create' | 'edit';
 }
 
-export function PersonaEditForm({ initial }: Props) {
+export function PersonaForm({ initial, mode }: Props) {
   const router = useRouter();
   const [commitInfo, setCommitInfo] = useState<{ url: string } | null>(null);
 
@@ -47,34 +52,55 @@ export function PersonaEditForm({ initial }: Props) {
 
   const { fields, append, remove } = useFieldArray({
     control,
-    // useFieldArray 는 string[] 직접 지원 X — register 로 우회
+    // useFieldArray는 string[] 직접 지원 X — register로 우회
     name: 'userQuestions' as never,
   });
 
   async function onSubmit(values: PersonaInput) {
+    const url =
+      mode === 'create'
+        ? '/api/admin/personas'
+        : `/api/admin/personas/${initial.id}`;
+    const method = mode === 'create' ? 'POST' : 'PUT';
     try {
-      const res = await fetch(`/api/admin/personas/${initial.id}`, {
-        method: 'PUT',
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(values),
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? '저장 실패');
-      }
+      if (!res.ok) throw new Error(data.error ?? '저장 실패');
       setCommitInfo({ url: data.commitUrl });
-      toast.success('GitHub에 commit 완료. 약 1-2분 후 배포 반영.');
-      router.refresh();
+      toast.success(
+        mode === 'create'
+          ? '페르소나가 생성되었습니다. 1-2분 후 반영.'
+          : 'GitHub commit 완료. 1-2분 후 반영.',
+      );
+      if (mode === 'create') {
+        router.push(`/admin/personas/${values.id}`);
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '저장 실패');
     }
   }
 
+  const isCreate = mode === 'create';
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-      {/* ID (읽기 전용) */}
-      <Field label="ID (변경 불가)" error={errors.id?.message}>
-        <Input {...register('id')} readOnly disabled className="font-mono" />
+      <Field
+        label={isCreate ? 'ID (kebab-case, 생성 후 변경 불가)' : 'ID (변경 불가)'}
+        error={errors.id?.message}
+      >
+        <Input
+          {...register('id')}
+          readOnly={!isCreate}
+          disabled={!isCreate}
+          className="font-mono"
+          placeholder={isCreate ? '예: brand-strategist' : undefined}
+        />
       </Field>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -129,7 +155,6 @@ export function PersonaEditForm({ initial }: Props) {
         />
       </Field>
 
-      {/* userQuestions 배열 */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label>샘플 사용자 질문</Label>
@@ -169,7 +194,6 @@ export function PersonaEditForm({ initial }: Props) {
         )}
       </div>
 
-      {/* 동적 여부 */}
       <label className="flex items-center gap-2 text-sm text-text">
         <input
           type="checkbox"
@@ -179,7 +203,6 @@ export function PersonaEditForm({ initial }: Props) {
         <span>도메인 동적 주입형 페르소나 (예: 도메인 전문가)</span>
       </label>
 
-      {/* 액션 */}
       <div className="sticky bottom-0 -mx-4 flex flex-col gap-2 border-t border-border bg-background/90 px-4 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-end">
         {commitInfo && (
           <a
@@ -192,14 +215,18 @@ export function PersonaEditForm({ initial }: Props) {
           </a>
         )}
         <Link
-          href={`/admin/personas/${initial.id}`}
+          href={isCreate ? '/admin/personas' : `/admin/personas/${initial.id}`}
           className="rounded-md px-3 py-2 text-center text-sm text-text-muted hover:text-text"
         >
           취소
         </Link>
-        <Button type="submit" disabled={isSubmitting || !isDirty}>
+        <Button type="submit" disabled={isSubmitting || (!isCreate && !isDirty)}>
           {isSubmitting && <Loader2 className="size-4 animate-spin" />}
-          {isSubmitting ? '저장 중...' : '저장 + 배포'}
+          {isSubmitting
+            ? '저장 중...'
+            : isCreate
+              ? '생성 + 배포'
+              : '저장 + 배포'}
         </Button>
       </div>
     </form>

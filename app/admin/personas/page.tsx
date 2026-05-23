@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Lock, Pencil } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Lock, Plus } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
@@ -27,12 +27,16 @@ export default function AdminPersonasPage() {
           <ArrowLeft className="size-3.5" />
           대시보드
         </Link>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h1 className="text-2xl font-bold text-text">페르소나 ({PERSONAS.length})</h1>
           {isEditEnabled() ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-              <Pencil className="size-3" /> 편집 가능
-            </span>
+            <Link
+              href="/admin/personas/new"
+              className="inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+            >
+              <Plus className="size-3.5" />
+              새 페르소나
+            </Link>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-xs text-text-muted">
               <Lock className="size-3" /> 읽기 전용
