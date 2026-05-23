@@ -2,9 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import type { DebateStatus } from '@/components/debate/DebateControls';
 import { generateConclusion, generateSpeech } from '@/lib/ai/client';
+import { AiCallError } from '@/lib/ai/errors';
+import { PROVIDERS } from '@/lib/ai/providers';
 import { runWithFallback } from '@/lib/ai/runWithFallback';
+import { showAiError } from '@/lib/ai/showAiError';
 import {
   buildDebateContext,
   decideNextSpeaker,
@@ -165,7 +170,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
           PERSONA_MAP,
         );
 
-        // Phase B+C: 'debate' 적합 공급사로 시도, quota 시 다른 공급사로 자동 폴백
+        // Phase B+C: 'debate' 적합 공급사로 시도, quota 시 다른 공급사로 자동 폴백.
+        // 폴백 발생 시 사용자에게 짧은 알림 — 무슨 일이 일어났는지 알게.
         const liveKeys = useApiKeyStore.getState().keys;
         const speech = await runWithFallback(
           'debate',
@@ -177,6 +183,14 @@ export function useDebate(sessionId: string): UseDebateReturn {
               system: systemPrompt,
               prompt: userPrompt,
             }),
+          {
+            onFallback: (from, to) => {
+              toast.info(
+                `${PROVIDERS[from].displayName} 한도 → ${PROVIDERS[to].displayName} 로 자동 전환`,
+                { duration: 4_000 },
+              );
+            },
+          },
         );
 
         if (cancelled) return;
@@ -201,7 +215,14 @@ export function useDebate(sessionId: string): UseDebateReturn {
         appendMessage(sessionId, newMessage);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'unknown');
+        // AiCallError → 모든 후보 소진. 친절한 토스트 + status='error' 로 정지.
+        // 사용자가 /settings 에서 키를 손보고 "다시 시작" 누르면 재개 가능.
+        if (err instanceof AiCallError) {
+          showAiError(err, { alternateProvider: null });
+          setError(err.message);
+        } else {
+          setError(err instanceof Error ? err.message : 'unknown');
+        }
         setStatus('error');
       } finally {
         inFlightRef.current = false;
@@ -258,13 +279,26 @@ export function useDebate(sessionId: string): UseDebateReturn {
               messages: safeMessages,
               personaMap: PERSONA_MAP,
             }),
+          {
+            onFallback: (from, to) => {
+              toast.info(
+                `결론 생성: ${PROVIDERS[from].displayName} 한도 → ${PROVIDERS[to].displayName} 로 전환`,
+                { duration: 4_000 },
+              );
+            },
+          },
         );
         if (cancelled) return;
         saveConclusion(sessionId, result);
         setStatus('concluded');
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'unknown');
+        if (err instanceof AiCallError) {
+          showAiError(err, { alternateProvider: null });
+          setError(err.message);
+        } else {
+          setError(err instanceof Error ? err.message : 'unknown');
+        }
         setStatus('error');
       }
     }, 300);

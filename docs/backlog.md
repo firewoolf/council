@@ -7,14 +7,6 @@
 
 ## Active
 
-### B-1. 토론 중 발언 생성에도 quota fallback 확장
-- **배경**: `lib/ai/showAiError.ts` + `session/new` 흐름에는 자동 공급사 전환을 붙였지만, 회의실 안에서 도는 `generateSpeech` 가 같은 패턴을 안 씀. 토론 도중에 quota가 터지면 진행이 끊기고 사용자가 직접 /settings 로 가서 토글해야 함.
-- **할 일**:
-  - `hooks/useDebate.ts` (또는 회의실 컨테이너)에서 `generateSpeech` 호출부 catch.
-  - `AiCallError && kind === 'quota'` 일 때 store 의 다른 공급사 키 있으면 토스트 액션 노출 → 클릭 시 `setProvider` 후 다음 턴부터 새 공급사로 계속.
-  - 진행 중 메시지 손실 X — 실패한 턴만 다시 시도.
-- **주의**: `Session.aiProvider` 가 세션 단위 메타데이터로 저장돼 있음. 토론 중 전환 시 이 필드를 업데이트할지, 그대로 둘지 결정 필요.
-
 ### B-2. 어드민 진입점 노출
 - **배경**: `/admin` 으로 직접 URL 입력해야만 접근 가능. 운영자 본인이 사용 동선을 외워야 함.
 - **할 일**:
@@ -37,8 +29,25 @@
   - 없는 id 는 silently drop + 부족분은 random sample 로 보충.
   - 또는 추천 프롬프트에 현재 페르소나 ID 목록을 명시적으로 주입해 모델이 임의 id 생성 못하게.
 
+### D-1. Session.aiProvider 동기화 정책
+- **배경**: Phase C 자동 폴백 도입 후, 토론 중 실제 사용 공급사가 세션 시작 시점과 달라질 수 있음. 그러나 `Session.aiProvider` 메타데이터는 시작 시점 그대로 — `/history` 카드 등에서 표시되는 라벨이 부정확.
+- **선택지**:
+  - (I) **마지막 성공 공급사로 갱신** — useDebate 가 호출 후 `updateSessionProvider(sessionId, provider)` 호출. 가장 직관적.
+  - (II) **시작 공급사 유지** — 메타데이터 의미는 "사용자가 의도한 공급사". 폴백 사실은 별도 필드 (`fallbackHistory`) 로 보존.
+  - (III) **별도 필드 추가** — `Session.lastUsedProvider` 신설, `aiProvider` 는 시작 표기용.
+- **결정 필요**: 사용자가 `/history` 에서 무엇을 보고 싶은지에 달림. 단순함 우선이면 (I).
+- **할 일** (옵션 I 기준):
+  - `store/sessions.ts` 에 `updateSessionProvider(id, provider)` 추가.
+  - useDebate 의 두 호출 (generateSpeech / generateConclusion) 성공 직후 호출.
+  - 단 매 턴마다 호출하면 zustand persist write가 과해짐 → 마지막 사용 공급사가 바뀐 경우에만 호출하는 가드 필요.
+
 ---
 
 ## Done
 
-(없음)
+### B-1. 토론 중 발언 생성에도 quota fallback 확장 (commits 2eebde3, c현재)
+- ✅ Phase C `runWithFallback` 로 자동 처리. 토스트 액션 클릭 흐름 대신 "조용한 자동 폴백" 으로 정책 변경 (더 매끄러움).
+- ✅ 진행 중 메시지 손실 없음 — 실패한 턴만 재시도.
+- ✅ 폴백 발생 시 `onFallback` 콜백으로 사용자에게 `toast.info` 알림 ("Groq 한도 → Cerebras 로 자동 전환").
+- ✅ 모든 후보 소진 시 `showAiError` 로 친절한 안내 + `status='error'` 로 정지. 사용자가 /settings 손보고 "다시 시작" 누르면 재개 가능.
+- ➡️ 남은 한 가지 (`Session.aiProvider` 동기화) 는 정책 결정 필요해 **D-1 로 분리**.

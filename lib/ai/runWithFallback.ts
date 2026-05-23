@@ -27,10 +27,19 @@ import {
 
 type ProviderCall<T> = (provider: AiProvider, apiKey: string) => Promise<T>;
 
+export interface RunWithFallbackOptions {
+  /**
+   * 폴백이 발생할 때마다 호출 (from quota 실패 → to 재시도 시작 직전).
+   * UI 알림에 활용. 예외를 던지지 말 것 — 호출 흐름과 분리된 사이드이펙트만.
+   */
+  onFallback?: (from: AiProvider, to: AiProvider) => void;
+}
+
 export async function runWithFallback<T>(
   role: AiTaskRole,
   keys: Partial<Record<AiProvider, string>>,
   call: ProviderCall<T>,
+  opts: RunWithFallbackOptions = {},
 ): Promise<T> {
   const tried = new Set<AiProvider>();
   let lastErr: unknown;
@@ -56,7 +65,15 @@ export async function runWithFallback<T>(
       }
       // 시도 안 한 다음 후보 선택
       const remaining = available.filter((p) => !tried.has(p));
-      provider = pickProvider(role, remaining);
+      const nextProvider = pickProvider(role, remaining);
+      if (nextProvider && provider) {
+        try {
+          opts.onFallback?.(provider, nextProvider);
+        } catch {
+          // 사용자 콜백 실패는 메인 흐름을 끊지 않는다 (best-effort 알림).
+        }
+      }
+      provider = nextProvider;
     }
   }
 
