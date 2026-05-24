@@ -68,8 +68,8 @@ const panelMemberSchema = z.object({
     .nullable()
     .optional()
     .describe('source=archetype 이면 PERSONAS 의 id, 아니면 null'),
-  name: z.string(),
-  role: z.string().describe('한 줄 역할/도메인'),
+  name: z.string().optional(),
+  role: z.string().optional().describe('한 줄 역할/도메인'),
   temperament: z
     .string()
     .describe('advocate / critic / analyst / provocateur / empath 중 하나'),
@@ -79,7 +79,7 @@ const panelMemberSchema = z.object({
       '이 고민에 대한 입장 — 한 줄, 분명하게. ' +
         '"비판적이다" 같은 성향 말고 "X를 하지 말라고 주장한다" 식 구체적 주장.',
     ),
-  reason: z.string().describe('왜 이 사람이 이 패널에 필요한가 (50자 이내)'),
+  reason: z.string().optional().describe('왜 이 사람이 이 패널에 필요한가 (50자 이내)'),
 });
 
 export const panelDesignSchema = z.object({

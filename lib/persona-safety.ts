@@ -36,8 +36,8 @@ const VALID_TEMPERAMENTS = new Set<Temperament>([
  *
  * 처리 순서:
  *   1. source/temperament/stance 느슨한 스키마 정규화
- *   2. archetype: PERSONA_MAP 조회 — 없으면 generated 로 강등
- *   3. generated: characterPrompt 합성 + TEMPERAMENT_COLORS 적용
+ *   2. archetype: archetypeId dedupe → PERSONA_MAP 조회 → 없으면 generated 강등
+ *   3. generated: name/role 폴백 적용 → characterPrompt 합성 + TEMPERAMENT_COLORS
  *   4. 패널 크기 < 3 → 무작위 보충 (facilitator/domain-expert 제외)
  *   5. 전원 동일 temperament 경고
  */
@@ -46,6 +46,7 @@ export function sanitizePanel(
 ): { cast: CastMember[]; notes: string[] } {
   const notes: string[] = [];
   const cast: CastMember[] = [];
+  const seenArchetypeIds = new Set<string>();
 
   for (const raw of panel) {
     const source = VALID_SOURCES.has(raw.source)
@@ -62,23 +63,32 @@ export function sanitizePanel(
 
     if (source === 'archetype') {
       const archetypeId = raw.archetypeId ?? '';
-      const arch = PERSONA_MAP[archetypeId];
 
+      // dedupe: 같은 archetypeId 가 이미 cast 에 있으면 스킵
+      if (seenArchetypeIds.has(archetypeId)) {
+        notes.push(`archetypeId '${archetypeId}' 중복 → 스킵`);
+        continue;
+      }
+
+      const arch = PERSONA_MAP[archetypeId];
       if (!arch) {
         notes.push(`archetypeId '${archetypeId}' 없음 → generated 강등`);
+        const name = raw.name ?? '전문가';
+        const role = raw.role ?? '이 분야 전문가';
         const colors = TEMPERAMENT_COLORS[temperament];
         cast.push({
           id: crypto.randomUUID(),
           source: 'generated',
-          name: raw.name,
-          role: raw.role,
+          name,
+          role,
           temperament,
           stance,
           colorFrom: colors.from,
           colorTo: colors.to,
-          characterPrompt: synthesizeCharacterPrompt({ role: raw.role, temperament, stance }),
+          characterPrompt: synthesizeCharacterPrompt({ role, temperament, stance }),
         });
       } else {
+        seenArchetypeIds.add(archetypeId);
         cast.push({
           id: archetypeId,
           source: 'archetype',
@@ -93,17 +103,19 @@ export function sanitizePanel(
         });
       }
     } else {
+      const name = raw.name ?? '전문가';
+      const role = raw.role ?? '이 분야 전문가';
       const colors = TEMPERAMENT_COLORS[temperament];
       cast.push({
         id: crypto.randomUUID(),
         source: 'generated',
-        name: raw.name,
-        role: raw.role,
+        name,
+        role,
         temperament,
         stance,
         colorFrom: colors.from,
         colorTo: colors.to,
-        characterPrompt: synthesizeCharacterPrompt({ role: raw.role, temperament, stance }),
+        characterPrompt: synthesizeCharacterPrompt({ role, temperament, stance }),
       });
     }
   }
