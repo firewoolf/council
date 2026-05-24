@@ -21,6 +21,9 @@ import {
   buildRecommenderPrompt,
   recommendationSchema,
   type Recommendation,
+  buildPanelDesignPrompt,
+  panelDesignSchema,
+  type PanelDesign,
 } from '@/lib/prompts/recommender';
 import {
   buildConclusionPrompt,
@@ -188,6 +191,31 @@ export async function recommendPersonas(args: {
       model,
       schema: recommendationSchema,
       prompt: buildRecommenderPrompt(args.concern),
+      temperature: TEMPERATURE.recommend,
+      maxRetries: 1,
+    });
+    return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
+}
+
+/**
+ * 패널 설계 호출 (Phase B-2).
+ * recommendPersonas 대체 — generated 멤버 지원, 느슨한 스키마.
+ * 결과는 sanitizePanel 에 통과시켜야 CastMember[] 가 된다.
+ */
+export async function designPanel(args: {
+  provider: AiProvider;
+  apiKey: string;
+  concern: string;
+}): Promise<PanelDesign> {
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: panelDesignSchema,
+      prompt: buildPanelDesignPrompt(args.concern),
       temperature: TEMPERATURE.recommend,
       maxRetries: 1,
     });

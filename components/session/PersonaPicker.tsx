@@ -8,7 +8,7 @@ import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { PERSONAS, PERSONA_MAP } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
-import type { Archetype as Persona } from '@/types/persona';
+import type { Archetype as Persona, CastMember } from '@/types/persona';
 
 interface PersonaPickerProps {
   /** AI가 추천한 personaId 목록 (보통 3개) */
@@ -24,6 +24,11 @@ interface PersonaPickerProps {
   domain: string | null;
   /** 현재 선택된 personaId 목록 (사회자 포함) */
   selectedIds: string[];
+  /**
+   * Phase B-2 — generated CastMember 목록 (항상 포함, 토글 불가).
+   * §5.1 검증 슬라이스 용 최소 배선. §5.6 전체 재작성 시 props 구조 교체 예정.
+   */
+  generatedCast?: CastMember[];
   onToggle: (personaId: string) => void;
   onStart: () => void;
   busy?: boolean;
@@ -48,6 +53,7 @@ export function PersonaPicker({
   stances,
   domain,
   selectedIds,
+  generatedCast = [],
   onToggle,
   onStart,
   busy,
@@ -76,6 +82,13 @@ export function PersonaPicker({
   const selectedPersonas = selectedIds
     .map((id) => PERSONA_MAP[id])
     .filter((p): p is Persona => Boolean(p));
+
+  // Bottom preview: archetype selected + all generated
+  const previewOrbs: Array<Pick<CastMember, 'name' | 'colorFrom' | 'colorTo'>> = [
+    ...selectedPersonas,
+    ...generatedCast,
+  ];
+  const previewCount = selectedPersonas.length + generatedCast.length;
 
   return (
     <section className="flex flex-col gap-6 pb-32">
@@ -117,6 +130,41 @@ export function PersonaPicker({
           ))}
         </div>
       </div>
+
+      {/* generated 멤버 (항상 포함, 토글 불가) */}
+      {generatedCast.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+            즉석 설계 전문가
+          </h2>
+          <div className="flex flex-col gap-3">
+            {generatedCast.map((m) => (
+              <div
+                key={m.id}
+                className="relative flex w-full items-start gap-4 rounded-xl border border-primary/40 bg-surface-2 p-4"
+                style={{ borderLeftWidth: 4, borderLeftColor: m.colorTo }}
+              >
+                <PersonaOrb persona={m} size={56} glow="soft" className="mt-0.5" />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <h3 className="truncate text-base font-semibold text-text">{m.name}</h3>
+                    <span className="shrink-0 rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
+                      자동 포함
+                    </span>
+                  </div>
+                  <p className="line-clamp-1 text-xs text-text-muted">{m.role}</p>
+                  {m.stance && (
+                    <p className="line-clamp-2 rounded-md border-l-2 border-accent/60 bg-accent/10 px-2 py-1 text-xs leading-relaxed text-text/90">
+                      <span className="mr-1 font-semibold text-accent">입장</span>
+                      {m.stance}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 사회자 (자동 포함, 정보성) */}
       <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 p-4">
@@ -169,31 +217,31 @@ export function PersonaPicker({
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3 sm:px-6">
           <div className="flex -space-x-2">
-            {selectedPersonas.slice(0, 5).map((p) => (
+            {previewOrbs.slice(0, 5).map((p, i) => (
               <PersonaOrb
-                key={p.id}
+                key={`${p.name}-${i}`}
                 persona={p}
                 size={32}
                 glow="none"
                 className="ring-2 ring-background"
               />
             ))}
-            {selectedPersonas.length > 5 && (
+            {previewCount > 5 && (
               <div className="flex size-8 items-center justify-center rounded-full bg-surface-2 text-xs font-medium text-text-muted ring-2 ring-background">
-                +{selectedPersonas.length - 5}
+                +{previewCount - 5}
               </div>
             )}
           </div>
 
           <span className="flex-1 truncate text-xs text-text-muted">
             <Users className="mr-1 inline size-3.5" />
-            {selectedPersonas.length}명 참여
+            {previewCount}명 참여
           </span>
 
           <Button
             size="default"
             onClick={onStart}
-            disabled={busy || selectedPersonas.length < 2}
+            disabled={busy || previewCount < 2}
           >
             회의 시작
           </Button>

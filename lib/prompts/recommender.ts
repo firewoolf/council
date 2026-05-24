@@ -1,8 +1,9 @@
 /**
  * 페르소나 추천 프롬프트.
  *
- * 사용자의 고민 텍스트를 분석하여 최적의 페르소나 3명을 추천한다.
- * generateObject 로 호출 → 정해진 schema 로 반환.
+ * Phase B-1: recommendationSchema / buildRecommenderPrompt — 아키타입 id 열거형 기반.
+ * Phase B-2: panelDesignSchema / buildPanelDesignPrompt — 느슨한 스키마, generated 지원.
+ *   모든 업무 규칙 검증은 sanitizePanel(lib/persona-safety.ts) 이 전담한다.
  */
 
 import { z } from 'zod';
@@ -50,6 +51,47 @@ export const recommendationSchema = z.object({
 
 export type Recommendation = z.infer<typeof recommendationSchema>;
 
+// ─── Phase B-2: panelDesignSchema ────────────────────────────────────────────
+
+/**
+ * 느슨한 패널 설계 스키마.
+ * enum·min 제약을 제거해 자유 모델의 generateObject 검증 실패를 최소화한다.
+ * 모든 업무 규칙(source/temperament 정규화, 패널 크기, archetypeId 검증)은
+ * sanitizePanel 이 전담한다.
+ */
+const panelMemberSchema = z.object({
+  source: z
+    .string()
+    .describe("'archetype' 또는 'generated'"),
+  archetypeId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe('source=archetype 이면 PERSONAS 의 id, 아니면 null'),
+  name: z.string(),
+  role: z.string().describe('한 줄 역할/도메인'),
+  temperament: z
+    .string()
+    .describe('advocate / critic / analyst / provocateur / empath 중 하나'),
+  stance: z
+    .string()
+    .describe(
+      '이 고민에 대한 입장 — 한 줄, 분명하게. ' +
+        '"비판적이다" 같은 성향 말고 "X를 하지 말라고 주장한다" 식 구체적 주장.',
+    ),
+  reason: z.string().describe('왜 이 사람이 이 패널에 필요한가 (50자 이내)'),
+});
+
+export const panelDesignSchema = z.object({
+  detectedDomain: z.string().nullable().optional(),
+  panel: z
+    .array(panelMemberSchema)
+    .max(8)
+    .describe('3~4명 권장 — 개수·내용 검증은 sanitizePanel 이 전담.'),
+});
+
+export type PanelDesign = z.infer<typeof panelDesignSchema>;
+
 const PERSONA_CATALOG = PERSONAS.map(
   (p) => `- ${p.id}: ${p.name} — ${p.role} / ${p.coreValue}`,
 ).join('\n');
@@ -84,6 +126,43 @@ ${concern}
 [고민에서 도메인 추출]
 - 명확한 업계가 있으면 detectedDomain 에 한 단어로 (예: "여행앱", "핀테크", "SaaS")
 - 없으면 null
+
+[출력]
+스키마에 정의된 JSON 구조로만 응답.`;
+}
+
+// ─── Phase B-2: buildPanelDesignPrompt ───────────────────────────────────────
+
+const ARCHETYPE_CATALOG = PERSONAS.map(
+  (p) =>
+    `- id:"${p.id}" 이름:"${p.name}" 역할:${p.role} 핵심가치:${p.coreValue} temperament:${p.temperament}`,
+).join('\n');
+
+export function buildPanelDesignPrompt(concern: string): string {
+  return `당신은 전문가 패널을 설계하는 큐레이터입니다.
+
+[사용 가능한 아키타입 목록]
+${ARCHETYPE_CATALOG}
+
+[사용자의 고민]
+${concern}
+
+[패널 설계 원칙]
+1. 3~4명으로 패널을 구성한다 (사회자 제외 — 자동으로 추가됨).
+2. 의견이 반드시 갈려야 한다:
+   - 추진/찬성 1명: "___ 를 지금 해야 한다" 형태의 입장
+   - 반대/제동 1명: "___ 는 하면 안 된다, ___ 가 먼저다" 형태의 입장
+   - 전제를 의심하는 제3의 각도 1명: "애초에 질문 자체가 틀렸다" 형태의 입장
+3. 아키타입이 잘 맞으면 source:"archetype" 으로, archetypeId 에 해당 id 를 넣는다.
+4. 고민의 분야(교육·군·의료·수의·법·농업 등)가 아키타입 목록으로 안 잡히면
+   source:"generated" 으로 그 분야 전문가를 즉석 설계한다.
+   - name: 한국어 이름 (예: "베테랑 수의사", "군 창업 전문가")
+   - role: 한 줄 역할/도메인
+   - temperament: advocate / critic / analyst / provocateur / empath 중 하나
+5. 입장(stance)은 "성향"이 아니라 "이 고민에서의 구체적 주장"이다.
+   ✗ "비판적 관점에서 보는 사람"
+   ✓ "동물병원 SaaS는 원장 1인 체제 특성상 6개월 안에 시스템을 바꾸지 않는다. 지금 당장 파일럿 계약 없이 개발부터 하지 말라"
+6. reason 은 "왜 이 사람이 이 패널에 필요한가" (50자 이내).
 
 [출력]
 스키마에 정의된 JSON 구조로만 응답.`;

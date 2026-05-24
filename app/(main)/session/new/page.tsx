@@ -9,7 +9,7 @@ import { ArrowLeft, KeyRound } from 'lucide-react';
 import { ConcernInput } from '@/components/session/ConcernInput';
 import { PersonaPicker } from '@/components/session/PersonaPicker';
 import { Button } from '@/components/ui/button';
-import { recommendPersonas } from '@/lib/ai/client';
+import { designPanel } from '@/lib/ai/client';
 import { AiCallError } from '@/lib/ai/errors';
 import {
   BYOK_PROVIDERS,
@@ -19,10 +19,7 @@ import {
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
-import {
-  sanitizeRecommendedIds,
-  sanitizeSelectedIds,
-} from '@/lib/persona-safety';
+import { sanitizePanel } from '@/lib/persona-safety';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
@@ -48,8 +45,9 @@ export default function NewSessionPage() {
 
   const [step, setStep] = useState<Step>('input');
   const [concern, setConcern] = useState('');
-  const [recommendedIds, setRecommendedIds] = useState<string[]>([]);
-  // Phase A — 추천기가 배정한 personaId → stance. 회의 시작 시 createSession 에 전달.
+  // Phase B-2 — 패널 설계 결과. sanitizePanel 후 저장.
+  const [panelCast, setPanelCast] = useState<CastMember[]>([]);       // archetype + generated
+  const [recommendedIds, setRecommendedIds] = useState<string[]>([]);  // archetype 전용 (picker 호환)
   const [stances, setStances] = useState<Record<string, string>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [domain, setDomain] = useState<string | null>(null);
@@ -75,41 +73,62 @@ export default function NewSessionPage() {
       setStep('analyzing');
 
       try {
-        // Phase B 라우팅 + Phase C 자동 폴백:
-        // 'recommend' 적합 공급사로 시도 → quota면 다른 공급사로 1회 재시도.
+        // Phase B-2: designPanel → sanitizePanel → CastMember[]
         const { result } = await runWithFallback(
           'recommend',
           state.keys,
           (provider, apiKey) =>
-            recommendPersonas({ provider, apiKey, concern: text }),
+            designPanel({ provider, apiKey, concern: text }),
         );
 
-        // B-4 안전망: 모델이 환각 id 또는 어드민 삭제 직후 stale id 를 줄 수 있다.
-        // 알려진 id 만 통과시키고 부족분은 무작위 보충.
-        const rawIds = result.recommended.map((r) => r.personaId);
-        const safe = sanitizeRecommendedIds(rawIds);
-        if (safe.dropped.length > 0) {
-          toast.info(
-            `삭제됐거나 알 수 없는 페르소나 ${safe.dropped.length}명 → 다른 페르소나로 대체`,
-            { duration: 5_000 },
-          );
+        const { cast, notes } = sanitizePanel(result.panel);
+        if (notes.length > 0) {
+          toast.info(notes.join(' / '), { duration: 5_000 });
         }
-        // reasonMap + stanceMap 도 정리 — drop 된 id 는 함께 제거.
-        // filled 된 id 는 stance/reason 없음(중립). 토론 시 stance 빈 문자열로 처리됨.
-        const survivingRecs = result.recommended.filter((r) =>
-          safe.ids.includes(r.personaId),
-        );
-        const reasonMap = Object.fromEntries(
-          survivingRecs.map((r) => [r.personaId, r.reason]),
-        );
-        const stanceMap = Object.fromEntries(
-          survivingRecs.map((r) => [r.personaId, r.stance]),
-        );
 
-        // 사회자는 항상 자동 포함
-        const initialSelection = [...new Set([...safe.ids, FACILITATOR_ID])];
+        // 추천 사유 맵 (archetype 멤버용 — archetypeId 기준)
+        const reasonMap: Record<string, string> = {};
+        const stanceMap: Record<string, string> = {};
+        for (const raw of result.panel) {
+          if (raw.source === 'archetype' && raw.archetypeId) {
+            if (raw.reason) reasonMap[raw.archetypeId] = raw.reason;
+            if (raw.stance) stanceMap[raw.archetypeId] = raw.stance;
+          }
+        }
 
-        setRecommendedIds(safe.ids);
+        // 사회자 archetype CastMember 추가 (cast 에 없으면)
+        const hasFacilitator = cast.some((m) => m.isFacilitator);
+        if (!hasFacilitator) {
+          const fArch = PERSONA_MAP[FACILITATOR_ID];
+          if (fArch) {
+            cast.push({
+              id: FACILITATOR_ID,
+              source: 'archetype',
+              archetypeId: FACILITATOR_ID,
+              name: fArch.name,
+              role: fArch.role,
+              temperament: fArch.temperament,
+              stance: '',
+              colorFrom: fArch.colorFrom,
+              colorTo: fArch.colorTo,
+              isFacilitator: true,
+            });
+          }
+        }
+
+        // PersonaPicker 호환: archetype 멤버 id 만 recommendedIds 로 전달
+        const archetypeIds = cast
+          .filter((m) => m.source === 'archetype' && !m.isFacilitator)
+          .map((m) => m.id);
+
+        // 선택 초기값: archetype 멤버 전체 + 사회자
+        const initialSelection = [
+          ...archetypeIds,
+          FACILITATOR_ID,
+        ];
+
+        setPanelCast(cast);
+        setRecommendedIds(archetypeIds);
         setReasons(reasonMap);
         setStances(stanceMap);
         setDomain(result.detectedDomain ?? null);
@@ -158,44 +177,27 @@ export default function NewSessionPage() {
       toast.error('AI 공급사가 선택되지 않았습니다.');
       return;
     }
-    const safe = sanitizeSelectedIds(selectedIds);
-    if (safe.dropped.length > 0) {
-      toast.info(
-        `선택했던 페르소나 중 ${safe.dropped.length}명이 더 이상 존재하지 않아 제외했습니다.`,
-        { duration: 5_000 },
-      );
-    }
-    if (safe.ids.length < 2) {
+
+    // 선택된 archetype + 모든 generated + 사회자
+    const selectedSet = new Set(selectedIds);
+    const finalCast = panelCast.filter(
+      (m) => m.isFacilitator || m.source === 'generated' || selectedSet.has(m.id),
+    );
+
+    // 최소 2명(사회자 포함) 검증
+    if (finalCast.length < 2) {
       toast.error('최소 2명 이상 선택해주세요.');
       return;
     }
-    // Phase B — 아키타입 id 배열 → CastMember[] 변환.
-    // id 는 아키타입 id 그대로(§4.3) 사용해 옛 messages.speakerId 호환.
-    const cast: CastMember[] = [];
-    for (const id of safe.ids) {
-      const arch = PERSONA_MAP[id];
-      if (!arch) continue;
-      cast.push({
-        id,
-        source: 'archetype',
-        archetypeId: id,
-        name: arch.name,
-        role: arch.role,
-        temperament: arch.temperament,
-        stance: stances[id] ?? '',
-        colorFrom: arch.colorFrom,
-        colorTo: arch.colorTo,
-        isFacilitator: id === FACILITATOR_ID,
-      });
-    }
+
     const session = createSession({
       concern,
-      cast,
+      cast: finalCast,
       aiProvider: provider,
       domain,
     });
     router.push(`/session/${session.id}`);
-  }, [provider, selectedIds, concern, domain, stances, createSession, router]);
+  }, [provider, selectedIds, panelCast, concern, domain, createSession, router]);
 
   // 마운트 전: 깜빡임 방지용 빈 컨테이너
   if (!mounted) {
@@ -247,6 +249,7 @@ export default function NewSessionPage() {
           stances={stances}
           domain={domain}
           selectedIds={selectedIds}
+          generatedCast={panelCast.filter((m) => m.source === 'generated')}
           onToggle={handleToggle}
           onStart={handleStart}
         />
