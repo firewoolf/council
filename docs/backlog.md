@@ -8,20 +8,32 @@
 ## Active
 
 ### 트랙① Phase B-2 — 동적 생성 + 커스텀 + picker 재작성
-B-1 출하·검증 통과 후 착수. 워크오더 `docs/workorder-persona-B-cast.md` §5.
-- 추천기 `panelDesignSchema`(동적 생성), `sanitizePanel` 재작성, 커스텀 추가 폼,
-  PersonaPicker 재작성, 렌더링 cast 전환, `conclusionSchema` enum 해제.
-- 착수 전 §5.1 리스크 검증 필요 — Gemini/Groq 에서 panelDesignSchema 구조화 출력
-  안정성 확인.
+워크오더 `docs/workorder-persona-B-cast.md` §5. **진행 중.**
+
+**현재 커서 (2026-05-24):**
+- ✅ §5.1 검증 슬라이스 출하 — `panelDesignSchema`(느슨한 스키마: enum·min 제거),
+  `buildPanelDesignPrompt`, `designPanel`(client), `sanitizePanel`(정규화·강등·보충·dedupe),
+  `synthesizeCharacterPrompt`. `designPanel`을 new-session 흐름에 최소 배선 — picking
+  화면에 generated 멤버("즉석 설계 전문가") 표시까지.
+- ✅ 하드닝 — `panelMemberSchema`의 name/role/reason `.optional()`,
+  `sanitizePanel` generated 폴백(`'전문가'`/`'이 분야 전문가'`) + archetypeId dedupe.
+- ⏭️ **다음 할 일 = 운영자 라이브 §5.1 검증.** `/settings`에서 키 등록 후 비아키타입
+  분야 고민("동물병원 SaaS 만들지, 군 전역 후 다른 창업"類)으로 1세션 → picking
+  화면에서 generated 멤버 등장·stance 구체성·에러 여부 확인 (Gemini/Groq 각각, 키 하나씩).
+  picking 화면까지만 — 회의 시작 누르면 generated 발언자가 회의실에서 "???" 로 뜸(§5.7 미완, 정상).
+  에러 시 구분: (a) JSON 생성 자체 실패 → 스키마 평탄화 / (b) JSON 왔으나 부실 → sanitize·프롬프트 튜닝.
+- ⬜ §5.1 통과 후 B-2 본체: PersonaPicker 전체 재작성·커스텀 추가 폼·temperament 뱃지(§5.6),
+  렌더링 cast 전환(§5.7 — debate/summary/history 의 PERSONA_MAP 조회 → cast 조회),
+  `conclusionSchema.personaId` enum 해제(§5.8).
 
 ### 트랙① Phase B-3 (선택) — Supabase `session_cast` 마이그레이션
-미연결이라 블로킹 아님.
+미연결이라 블로킹 아님. 워크오더 §6.
 
 ---
 
 ## Done
 
-### 트랙① Phase B-1 — 데이터 모델 마이그레이션 (commit 현재)
+### 트랙① Phase B-1 — 데이터 모델 마이그레이션 (commit 35e1433)
 워크오더 `docs/workorder-persona-B-cast.md` §4. "보이는 변화 0, 데이터 배관만" 출하.
 - ✅ `types/persona.ts`: `Persona` → `Archetype` 개명, `Temperament` union, `CastMember` 신규. `dynamic` 필드 제거.
 - ✅ `data/personas.json`: 10명 모두 temperament 추가 (워크오더 §4.2 매핑), `dynamic` 제거, domain-expert 자리표시자 정리.

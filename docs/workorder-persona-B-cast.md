@@ -259,29 +259,43 @@ B-1 에선 추천기(`recommender.ts`)·`persona-safety.ts`·`PersonaPicker` 의
 
 ### 5.1 착수 전 리스크 검증 — 먼저 할 것
 
-스펙 §11 리스크: 무료 모델(Gemini Flash / Groq)이 `panelDesignSchema`(중첩 배열 + 자유 텍스트 stance + nullable)를 안정적으로 못 채울 수 있다. **B-2 의 첫 작업은 이 스키마로 Gemini·Groq 에 실제 `generateObject` 를 한 번 돌려 구조화 출력이 깨지지 않는지 확인하는 것.** 불안정하면 picker 등 나머지 작업 전에 보고하라 — 스키마를 평탄화하거나 Gemini 고정으로 정책을 바꾼다.
+스펙 §11 리스크: 무료 모델(Gemini Flash / Groq)이 `panelDesignSchema`(중첩 배열)를 안정적으로 못 채울 수 있다. **B-2 의 첫 작업은 이 스키마로 Gemini·Groq 에 실제 `generateObject` 를 한 번 돌려 구조화 출력이 깨지지 않는지 확인하는 것.**
+
+검증 시 두 가지를 반드시 구분하라:
+- **(a) JSON 자체를 못 만듦** — 중첩 배열 생성 실패. → 스키마 평탄화 필요. 보고 후 진행 보류.
+- **(b) JSON 은 왔는데 내용이 부실** — 필드 누락·엉뚱한 temperament·짧은 stance. → `sanitizePanel`·프롬프트 튜닝으로 흡수. 스키마는 그대로, 진행 가능.
+
+§5.2 의 느슨한 스키마(enum·min 제거)는 (b) 를 거의 제거한다 — 따라서 실질 리스크는 (a) 뿐이고, Gemini 2.0 Flash 는 (a) 를 안정적으로 통과한다. 진짜 변수는 Groq 하나다. Groq 만 (a) 면 'recommend' 라우팅을 Gemini 고정으로 좁히고 진행한다.
+
+**검증 절차** — picker 전체 재작성(§5.6) 전에, `designPanel` 을 new-session 흐름에 최소 배선만 해 운영자가 1세션 돌려 picking 화면에 설계된 패널이 뜨는지 확인한다. 이 1세션이 §5.1 검증이자 새 추천기의 첫 실사용이다. 결과 확인 후에 나머지 B-2 에 착수.
 
 ### 5.2 추천기 재설계 (`lib/prompts/recommender.ts`, `lib/ai/client.ts`)
 
 스펙 §4. `recommendationSchema` 폐기 → `panelDesignSchema`:
 
 ```ts
+// 스키마는 최대한 느슨하게 둔다 — enum·min 제약을 전부 뺀다.
+// 자유 모델의 generateObject 는 "중첩 배열을 못 만들어서"보다
+// "temperament enum·stance.min 같은 제약을 못 맞춰서" Zod 검증에서 더 자주 깨진다.
+// 느슨한 스키마 = 검증 실패가 거의 사라짐. 모든 업무 규칙은 sanitizePanel(§5.5)이 전담.
 const panelMemberSchema = z.object({
-  source: z.enum(['archetype', 'generated']),
-  archetypeId: z.string().nullable()
+  source: z.string().describe("'archetype' 또는 'generated'"),
+  archetypeId: z.string().nullable().optional()
     .describe('source=archetype 이면 PERSONAS 의 id, 아니면 null'),
   name: z.string(),
   role: z.string().describe('한 줄 역할/도메인'),
-  temperament: z.enum(['advocate','critic','analyst','provocateur','empath']),
-  stance: z.string().min(5)
+  temperament: z.string()
+    .describe('advocate / critic / analyst / provocateur / empath 중 하나'),
+  stance: z.string()
     .describe('이 고민에 대한 입장 — 한 줄, 분명하게. "비판적이다" 같은 성향 말고 '
             + '"X를 하지 말라고 주장한다" 식 구체적 주장.'),
   reason: z.string().describe('왜 이 사람이 이 패널에 필요한가 (50자 이내)'),
 });
 
 export const panelDesignSchema = z.object({
-  detectedDomain: z.string().nullable(),
-  panel: z.array(panelMemberSchema).min(3).max(4),
+  detectedDomain: z.string().nullable().optional(),
+  panel: z.array(panelMemberSchema).max(8)
+    .describe('3~4명 권장 — 개수·내용 검증은 sanitizePanel 이 전담.'),
 });
 export type PanelDesign = z.infer<typeof panelDesignSchema>;
 ```
@@ -322,6 +336,7 @@ export const TEMPERAMENT_COLORS: Record<Temperament, { from: string; to: string 
 
 스펙 §6. 기존 `sanitizeRecommendedIds`/`sanitizeSelectedIds` 는 "아키타입 id 환각" 가드였다 — 모델이 이제 합법적으로 새 페르소나를 *만들기* 때문에 로직이 바뀐다. 신규 `sanitizePanel(panel: PanelDesign['panel']): { cast: CastMember[]; notes: string[] }`:
 
+- **느슨한 스키마 정규화 — 가장 먼저.** `source`·`temperament` 는 스키마상 그냥 string 이다(§5.2). sanitizePanel 진입 즉시: `source` 가 'archetype'/'generated' 가 아니면 'generated' 로, `temperament` 가 5종이 아니면 기본값 `analyst` 로, `stance` 가 비거나 공백뿐이면 빈 문자열(중립)로 정규화한다. 그다음 아래 규칙 적용.
 - `source:archetype` 인데 `archetypeId` 가 `PERSONA_MAP` 에 없음 → 그 멤버를 `source:generated` 로 강등(role/temperament/stance 는 살림, characterPrompt 합성, 색은 `TEMPERAMENT_COLORS`). `notes` 에 기록.
 - `source:generated` → 그대로 수용. characterPrompt 합성, 색 `TEMPERAMENT_COLORS`.
 - `source:archetype` 정상 → `PERSONA_MAP` 에서 필드 복사, id=archetypeId(§4.3).
