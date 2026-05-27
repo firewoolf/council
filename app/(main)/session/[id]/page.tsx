@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -23,7 +23,6 @@ import { useHasMounted } from '@/hooks/useHasMounted';
 import { useSessionsStore } from '@/store/sessions';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
-import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 실시간 자동 토론 회의실.
@@ -46,16 +45,7 @@ export default function SessionRoomPage() {
   const conclusion = useSessionsStore((s) => s.conclusions[id] ?? null);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
 
-  // B-1 통찰: 모든 cast 멤버가 아키타입 출신이므로 PERSONA_MAP 조회로 렌더링.
-  // B-2 에서 generated/custom 등장하면 이 부분을 cast 직접 조회로 바꾼다.
-  const personas = useMemo<Persona[]>(
-    () =>
-      cast
-        .map((m) => (m.archetypeId ? PERSONA_MAP[m.archetypeId] : undefined))
-        .filter((p): p is Persona => Boolean(p)),
-    [cast],
-  );
-
+  // Phase B-2 §5.7 — cast 를 그대로 사용. generated/custom 멤버도 정상 렌더.
   const { status, thinkingPersona, error, actions } = useDebate(id);
   const [headerOpen, setHeaderOpen] = useState(false);
 
@@ -94,10 +84,10 @@ export default function SessionRoomPage() {
           className="flex w-full items-start gap-3 p-4 text-left hover:bg-surface-2"
         >
           <div className="flex -space-x-1.5 shrink-0">
-            {personas.slice(0, 4).map((p) => (
+            {cast.slice(0, 4).map((m) => (
               <PersonaOrb
-                key={p.id}
-                persona={p}
+                key={m.id}
+                persona={m}
                 size={28}
                 glow="none"
                 className="ring-2 ring-surface"
@@ -114,7 +104,7 @@ export default function SessionRoomPage() {
               {session.title}
             </h1>
             <p className="mt-0.5 font-mono text-[11px] text-text-muted">
-              {personas.length}명 참여
+              {cast.length}명 참여
               {domain && ` · ${domain}`}
               {conclusion && ' · 결론 완료'}
             </p>
@@ -132,13 +122,13 @@ export default function SessionRoomPage() {
               {session.concern}
             </p>
             <div className="flex flex-wrap gap-2">
-              {personas.map((p) => (
+              {cast.map((m) => (
                 <span
-                  key={p.id}
+                  key={m.id}
                   className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2 py-1 text-xs text-text/90"
                 >
-                  <PersonaOrb persona={p} size={16} glow="none" />
-                  {p.name}
+                  <PersonaOrb persona={m} size={16} glow="none" />
+                  {m.name}
                 </span>
               ))}
             </div>
@@ -194,14 +184,11 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* 피드 — B-1 통찰: 렌더링은 PERSONA_MAP 조회. CastMember → Archetype 변환. */}
+      {/* 피드 — Phase B-2 §5.7: cast 직접 사용. generated/custom 도 정상 렌더. */}
       <DebateFeed
         messages={messages}
-        thinkingPersona={
-          thinkingPersona?.archetypeId
-            ? PERSONA_MAP[thinkingPersona.archetypeId] ?? null
-            : null
-        }
+        cast={cast}
+        thinkingMember={thinkingPersona ?? null}
         emptyHint={
           status === 'idle'
             ? '"토론 시작"을 누르면 페르소나들이 첫 발언을 시작합니다.'
@@ -213,7 +200,6 @@ export default function SessionRoomPage() {
       {status !== 'concluded' && status !== 'concluding' && (
         <UserInput
           activePersonaIds={cast.map((m) => m.id)}
-          domain={domain}
           disabled={status === 'error'}
           onSpeak={actions.injectUserMessage}
           onInstruct={actions.injectInstruction}

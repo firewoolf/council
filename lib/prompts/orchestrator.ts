@@ -14,13 +14,14 @@ import { z } from 'zod';
 
 import type { Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
-import { PERSONAS } from './personas';
 
 /**
  * 결론 schema — generateObject 출력 강제.
  * 4섹션: 핵심 결론 / 주요 리스크 / 페르소나별 입장 / 추천 액션.
+ *
+ * Phase B-2 §5.8 — personaId enum 해제. generated/custom 멤버 id 가 uuid 라
+ * z.enum 강제는 LLM 출력을 깬다. summary 화면이 session cast 에서 id 로 조회한다.
  */
-const personaIdValues = PERSONAS.map((p) => p.id) as [string, ...string[]];
 export const conclusionSchema = z.object({
   keyConclusion: z
     .string()
@@ -32,7 +33,9 @@ export const conclusionSchema = z.object({
   personaPositions: z
     .array(
       z.object({
-        personaId: z.enum(personaIdValues),
+        personaId: z
+          .string()
+          .describe('CastMember id — archetype id 또는 generated/custom uuid'),
         position: z.string().describe('이 페르소나의 최종 입장 — 한 줄'),
       }),
     )

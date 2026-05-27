@@ -15,7 +15,6 @@ type Tab = 'speak' | 'instruct' | 'add';
 
 interface UserInputProps {
   activePersonaIds: string[];
-  domain: string | null;
   disabled?: boolean;
   onSpeak: (content: string) => void;
   onInstruct: (content: string) => void;
@@ -42,7 +41,6 @@ const INSTRUCTION_PRESETS = [
 
 export function UserInput({
   activePersonaIds,
-  domain,
   disabled,
   onSpeak,
   onInstruct,

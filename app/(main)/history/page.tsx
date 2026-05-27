@@ -5,10 +5,8 @@ import { ArrowLeft, Clock, MessageSquare } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
-import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
-import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 전체 회의 기록.
@@ -62,11 +60,8 @@ export default function HistoryPage() {
 
       <ul className="flex flex-col gap-2">
         {all.map((session) => {
-          const cast = sessionCast?.[session.id] ?? [];
-          const personas = cast
-            .map((m) => (m.archetypeId ? PERSONA_MAP[m.archetypeId] : undefined))
-            .filter((p): p is Persona => Boolean(p))
-            .slice(0, 5);
+          // Phase B-2 §5.7 — cast 스냅샷 그대로 사용.
+          const cast = (sessionCast?.[session.id] ?? []).slice(0, 5);
           return (
             <li key={session.id}>
               <Link
@@ -74,10 +69,10 @@ export default function HistoryPage() {
                 className="group flex items-start gap-3 rounded-xl border border-border bg-surface p-4 transition-colors hover:border-primary/40 hover:bg-surface-2"
               >
                 <div className="flex shrink-0 -space-x-2">
-                  {personas.map((p) => (
+                  {cast.map((m) => (
                     <PersonaOrb
-                      key={p.id}
-                      persona={p}
+                      key={m.id}
+                      persona={m}
                       size={32}
                       glow="none"
                       className="ring-2 ring-surface"

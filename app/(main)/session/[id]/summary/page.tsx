@@ -15,10 +15,9 @@ import { toast } from 'sonner';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
-import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { useSessionsStore } from '@/store/sessions';
-import type { Archetype as Persona } from '@/types/persona';
+import type { CastMember } from '@/types/persona';
 
 /**
  * 결론 화면.
@@ -39,19 +38,22 @@ export default function SessionSummaryPage() {
 
   const session = useSessionsStore((s) => s.sessions[id]);
   const conclusion = useSessionsStore((s) => s.conclusions[id]);
-  const domain = useSessionsStore((s) => s.domains[id] ?? null);
+  const cast = useSessionsStore((s) => s.sessionCast?.[id] ?? []);
 
+  // Phase B-2 §5.7 — 세션 cast 에서 entry.personaId 로 멤버 조회.
+  // generated/custom uuid 도 정상 매핑됨 (§5.8 enum 해제와 짝).
   const positionEntries = useMemo(() => {
-    if (!conclusion) return [] as { persona: Persona; position: string }[];
+    if (!conclusion) return [] as { member: CastMember; position: string }[];
+    const castMap = new Map(cast.map((c) => [c.id, c]));
     return conclusion.personaPositions
       .map((entry) => {
-        const persona = PERSONA_MAP[entry.personaId];
-        return persona ? { persona, position: entry.position } : null;
+        const member = castMap.get(entry.personaId);
+        return member ? { member, position: entry.position } : null;
       })
       .filter(
-        (e): e is { persona: Persona; position: string } => e !== null,
+        (e): e is { member: CastMember; position: string } => e !== null,
       );
-  }, [conclusion]);
+  }, [conclusion, cast]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -133,19 +135,19 @@ export default function SessionSummaryPage() {
           </h2>
         </div>
         <ul className="flex flex-col gap-2">
-          {positionEntries.map(({ persona, position }) => (
+          {positionEntries.map(({ member, position }) => (
             <li
-              key={persona.id}
+              key={member.id}
               className="flex items-start gap-3 rounded-xl border border-border bg-surface p-4"
               style={{
                 borderLeftWidth: 4,
-                borderLeftColor: persona.colorTo,
+                borderLeftColor: member.colorTo,
               }}
             >
-              <PersonaOrb persona={persona} size={36} className="shrink-0" />
+              <PersonaOrb persona={member} size={36} className="shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-text">
-                  {persona.name}
+                  {member.name}
                 </p>
                 <p className="mt-1 text-sm leading-relaxed text-text/90">
                   {position}

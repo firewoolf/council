@@ -4,10 +4,8 @@ import Link from 'next/link';
 import { ArrowUpRight, MessageSquare } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
-import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
-import type { Archetype as Persona } from '@/types/persona';
 
 /**
  * 홈 — 최근 회의 5개 표시.
@@ -50,13 +48,8 @@ export function RecentSessions() {
       ) : (
         <ul className="flex flex-col gap-2">
           {recent.map((session) => {
-            // Phase B — cast 의 이름·색을 그대로 쓰지만 (스냅샷) 렌더링은
-            // PERSONA_MAP 조회로 일관 — 단, archetype 출신만 매칭됨.
-            const cast = sessionCast?.[session.id] ?? [];
-            const personas = cast
-              .map((m) => (m.archetypeId ? PERSONA_MAP[m.archetypeId] : undefined))
-              .filter((p): p is Persona => Boolean(p))
-              .slice(0, 4);
+            // Phase B-2 §5.7 — cast 스냅샷을 그대로 사용 (generated/custom 포함).
+            const cast = (sessionCast?.[session.id] ?? []).slice(0, 4);
             return (
               <li key={session.id}>
                 <Link
@@ -64,10 +57,10 @@ export function RecentSessions() {
                   className="group flex items-center gap-3 rounded-xl border border-border bg-surface p-3 transition-colors hover:border-primary/40 hover:bg-surface-2"
                 >
                   <div className="flex -space-x-2">
-                    {personas.map((p) => (
+                    {cast.map((m) => (
                       <PersonaOrb
-                        key={p.id}
-                        persona={p}
+                        key={m.id}
+                        persona={m}
                         size={28}
                         glow="none"
                         className="ring-2 ring-surface"

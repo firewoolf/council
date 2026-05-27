@@ -1,8 +1,9 @@
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
-import type { Archetype as Persona } from '@/types/persona';
+import type { Archetype, CastMember } from '@/types/persona';
 
 interface TypingIndicatorProps {
-  persona: Persona;
+  /** Archetype 또는 CastMember 모두 수용 — 이름·색만 쓴다. */
+  persona: Pick<Archetype | CastMember, 'name' | 'colorFrom' | 'colorTo'>;
 }
 
 /**

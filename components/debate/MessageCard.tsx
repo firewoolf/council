@@ -3,12 +3,12 @@ import { CornerDownRight, HelpCircle, Megaphone, User } from 'lucide-react';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/debate';
-import type { Archetype as Persona } from '@/types/persona';
+import type { CastMember } from '@/types/persona';
 
 interface MessageCardProps {
   message: Message;
-  /** 페르소나 발언일 때 그 페르소나. 사용자 발언이면 null. */
-  speaker: Persona | null;
+  /** 페르소나 발언일 때 그 발언자 CastMember. 사용자 발언이면 null. */
+  speaker: CastMember | null;
   /** 반박 대상 메시지의 발언자 (페르소나) — replyTo가 있을 때만 */
   replyTarget?: { speakerName: string; preview: string } | null;
 }
@@ -79,7 +79,7 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
           <span className="font-medium">{replyTarget.speakerName}</span>
           <span className="text-text-muted">에 반박</span>
           <span className="truncate text-text-muted/70">
-            · "{replyTarget.preview}"
+            · &ldquo;{replyTarget.preview}&rdquo;
           </span>
         </div>
       )}
