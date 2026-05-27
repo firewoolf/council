@@ -9,6 +9,9 @@
 
 ### 트랙① Phase B-2 — 동적 생성 + 커스텀 + picker 재작성
 워크오더 `docs/workorder-persona-B-cast.md` §5. **진행 중.**
+진행 가이드(체크포인트·역할 분담): `docs/plan-track1-phase-b-completion.md` (Opus, 2026-05-26).
+CP3 워크오더 부록(§5.6): `docs/workorder-persona-B-cast-cp3.md` (Opus, 2026-05-26).
+CP4 워크오더 부록(§5.7~§5.8): `docs/workorder-persona-B-cast-cp4.md` (Opus, 2026-05-26).
 
 **현재 커서 (2026-05-24):**
 - ✅ §5.1 검증 슬라이스 출하 — `panelDesignSchema`(느슨한 스키마: enum·min 제거),

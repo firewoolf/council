@@ -19,8 +19,20 @@
  */
 
 import personasJson from '@/data/personas.json';
-import type { Archetype, CastMember } from '@/types/persona';
+import type { Archetype, CastMember, Temperament } from '@/types/persona';
 import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '../base';
+
+/**
+ * temperament 한국어 라벨.
+ * picker 뱃지·커스텀 폼 칩에서 사용. 사용자 노출 표기 단일화.
+ */
+export const TEMPERAMENT_LABEL_KR: Record<Temperament, string> = {
+  advocate:    '옹호가',
+  critic:      '비판가',
+  analyst:     '분석가',
+  provocateur: '독설가',
+  empath:      '공감가',
+};
 
 /** 10개 아키타입 전체 — JSON 순서 그대로. */
 export const PERSONAS: readonly Archetype[] =

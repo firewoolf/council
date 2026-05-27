@@ -7,7 +7,10 @@ import { toast } from 'sonner';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 
 import { ConcernInput } from '@/components/session/ConcernInput';
-import { PersonaPicker } from '@/components/session/PersonaPicker';
+import {
+  PersonaPicker,
+  type CustomPersonaInput,
+} from '@/components/session/PersonaPicker';
 import { Button } from '@/components/ui/button';
 import { designPanel } from '@/lib/ai/client';
 import { AiCallError } from '@/lib/ai/errors';
@@ -19,13 +22,16 @@ import {
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
-import { sanitizePanel } from '@/lib/persona-safety';
+import {
+  ensureFacilitator,
+  sanitizePanel,
+  TEMPERAMENT_COLORS,
+} from '@/lib/persona-safety';
+import { synthesizeCharacterPrompt } from '@/lib/prompts/synthesize';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import type { CastMember } from '@/types/persona';
-
-const FACILITATOR_ID = 'facilitator';
 
 type Step = 'input' | 'analyzing' | 'picking';
 
@@ -34,8 +40,8 @@ type Step = 'input' | 'analyzing' | 'picking';
  *
  * input → analyzing → picking → /session/[id]
  *
- * API 키가 없으면 처음부터 차단하고 설정 페이지로 안내한다.
- * recommendPersonas 가 실패하면 사용자에게 재시도 옵션을 준다.
+ * Phase B-2 §5.6 — state 압축: cast / reasons / domain 세 개만.
+ * 토글 선택 개념 폐기 — cast 가 곧 패널.
  */
 export default function NewSessionPage() {
   const router = useRouter();
@@ -45,13 +51,9 @@ export default function NewSessionPage() {
 
   const [step, setStep] = useState<Step>('input');
   const [concern, setConcern] = useState('');
-  // Phase B-2 — 패널 설계 결과. sanitizePanel 후 저장.
-  const [panelCast, setPanelCast] = useState<CastMember[]>([]);       // archetype + generated
-  const [recommendedIds, setRecommendedIds] = useState<string[]>([]);  // archetype 전용 (picker 호환)
-  const [stances, setStances] = useState<Record<string, string>>({});
+  const [cast, setCast] = useState<CastMember[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [domain, setDomain] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const apiKey = getActiveKey();
   const hasKey = mounted && !!apiKey && !!provider;
@@ -73,7 +75,6 @@ export default function NewSessionPage() {
       setStep('analyzing');
 
       try {
-        // Phase B-2: designPanel → sanitizePanel → CastMember[]
         const { result } = await runWithFallback(
           'recommend',
           state.keys,
@@ -81,65 +82,28 @@ export default function NewSessionPage() {
             designPanel({ provider, apiKey, concern: text }),
         );
 
-        const { cast, notes } = sanitizePanel(result.panel);
+        const { cast: sanitized, notes } = sanitizePanel(result.panel);
         if (notes.length > 0) {
           toast.info(notes.join(' / '), { duration: 5_000 });
         }
 
-        // 추천 사유 맵 (archetype 멤버용 — archetypeId 기준)
+        const withFacilitator = ensureFacilitator(sanitized);
+
+        // archetype 멤버에 대한 추천 사유 맵
         const reasonMap: Record<string, string> = {};
-        const stanceMap: Record<string, string> = {};
         for (const raw of result.panel) {
-          if (raw.source === 'archetype' && raw.archetypeId) {
-            if (raw.reason) reasonMap[raw.archetypeId] = raw.reason;
-            if (raw.stance) stanceMap[raw.archetypeId] = raw.stance;
+          if (raw.source === 'archetype' && raw.archetypeId && raw.reason) {
+            reasonMap[raw.archetypeId] = raw.reason;
           }
         }
 
-        // 사회자 archetype CastMember 추가 (cast 에 없으면)
-        const hasFacilitator = cast.some((m) => m.isFacilitator);
-        if (!hasFacilitator) {
-          const fArch = PERSONA_MAP[FACILITATOR_ID];
-          if (fArch) {
-            cast.push({
-              id: FACILITATOR_ID,
-              source: 'archetype',
-              archetypeId: FACILITATOR_ID,
-              name: fArch.name,
-              role: fArch.role,
-              temperament: fArch.temperament,
-              stance: '',
-              colorFrom: fArch.colorFrom,
-              colorTo: fArch.colorTo,
-              isFacilitator: true,
-            });
-          }
-        }
-
-        // PersonaPicker 호환: archetype 멤버 id 만 recommendedIds 로 전달
-        const archetypeIds = cast
-          .filter((m) => m.source === 'archetype' && !m.isFacilitator)
-          .map((m) => m.id);
-
-        // 선택 초기값: archetype 멤버 전체 + 사회자
-        const initialSelection = [
-          ...archetypeIds,
-          FACILITATOR_ID,
-        ];
-
-        setPanelCast(cast);
-        setRecommendedIds(archetypeIds);
+        setCast(withFacilitator);
         setReasons(reasonMap);
-        setStances(stanceMap);
         setDomain(result.detectedDomain ?? null);
-        setSelectedIds(initialSelection);
         setStep('picking');
       } catch (err) {
         setStep('input');
         if (err instanceof AiCallError) {
-          // Phase C 자동 폴백 후에도 실패한 경우 = 모든 BYOK 공급사가 막힘.
-          // err.provider 는 마지막으로 실패한 공급사. 그 외 등록된 키 중에
-          // 토론에선 안 써본 공급사가 있으면 사용자 동의 후 전환 토스트로 안내.
           const altProvider: AiProvider | null =
             BYOK_PROVIDERS.find(
               (p) => p !== err.provider && !!state.keys[p],
@@ -160,16 +124,76 @@ export default function NewSessionPage() {
     [setProvider],
   );
 
-  const handleToggle = useCallback((personaId: string) => {
-    if (personaId === FACILITATOR_ID) {
-      toast.info('사회자는 항상 참여합니다.');
-      return;
-    }
-    setSelectedIds((prev) =>
-      prev.includes(personaId)
-        ? prev.filter((id) => id !== personaId)
-        : [...prev, personaId],
+  const handleRemove = useCallback((memberId: string) => {
+    setCast((prev) =>
+      prev.filter((m) => m.isFacilitator || m.id !== memberId),
     );
+  }, []);
+
+  const handleSwap = useCallback(
+    (memberId: string, newArchetypeId: string) => {
+      const arch = PERSONA_MAP[newArchetypeId];
+      if (!arch) return;
+      setCast((prev) =>
+        prev.map((m) => {
+          if (m.id !== memberId || m.source !== 'archetype') return m;
+          return {
+            id: newArchetypeId,
+            source: 'archetype',
+            archetypeId: newArchetypeId,
+            name: arch.name,
+            role: arch.role,
+            temperament: arch.temperament,
+            stance: m.stance, // 입장 유지 (사용자가 그 입장의 다른 캐릭터를 원한다고 가정)
+            colorFrom: arch.colorFrom,
+            colorTo: arch.colorTo,
+          };
+        }),
+      );
+    },
+    [],
+  );
+
+  const handleAddFromPool = useCallback((archetypeId: string) => {
+    const arch = PERSONA_MAP[archetypeId];
+    if (!arch) return;
+    setCast((prev) => {
+      if (prev.some((m) => m.archetypeId === archetypeId)) return prev;
+      return [
+        ...prev,
+        {
+          id: archetypeId,
+          source: 'archetype',
+          archetypeId,
+          name: arch.name,
+          role: arch.role,
+          temperament: arch.temperament,
+          stance: '',
+          colorFrom: arch.colorFrom,
+          colorTo: arch.colorTo,
+        },
+      ];
+    });
+  }, []);
+
+  const handleAddCustom = useCallback((input: CustomPersonaInput) => {
+    const colors = TEMPERAMENT_COLORS[input.temperament];
+    const newMember: CastMember = {
+      id:
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `custom-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      source: 'custom',
+      name: input.name,
+      role: input.role,
+      temperament: input.temperament,
+      stance: input.stance,
+      colorFrom: colors.from,
+      colorTo: colors.to,
+      characterPrompt: synthesizeCharacterPrompt(input),
+    };
+    setCast((prev) => [...prev, newMember]);
+    toast.success(`${newMember.name} 추가됨`);
   }, []);
 
   const handleStart = useCallback(() => {
@@ -177,27 +201,18 @@ export default function NewSessionPage() {
       toast.error('AI 공급사가 선택되지 않았습니다.');
       return;
     }
-
-    // 선택된 archetype + 모든 generated + 사회자
-    const selectedSet = new Set(selectedIds);
-    const finalCast = panelCast.filter(
-      (m) => m.isFacilitator || m.source === 'generated' || selectedSet.has(m.id),
-    );
-
-    // 최소 2명(사회자 포함) 검증
-    if (finalCast.length < 2) {
-      toast.error('최소 2명 이상 선택해주세요.');
+    if (cast.length < 2) {
+      toast.error('최소 2명 이상 참여해야 합니다.');
       return;
     }
-
     const session = createSession({
       concern,
-      cast: finalCast,
+      cast,
       aiProvider: provider,
       domain,
     });
     router.push(`/session/${session.id}`);
-  }, [provider, selectedIds, panelCast, concern, domain, createSession, router]);
+  }, [provider, cast, concern, domain, createSession, router]);
 
   // 마운트 전: 깜빡임 방지용 빈 컨테이너
   if (!mounted) {
@@ -244,13 +259,13 @@ export default function NewSessionPage() {
       )}
       {step === 'picking' && (
         <PersonaPicker
-          recommendedIds={recommendedIds}
+          cast={cast}
           reasons={reasons}
-          stances={stances}
           domain={domain}
-          selectedIds={selectedIds}
-          generatedCast={panelCast.filter((m) => m.source === 'generated')}
-          onToggle={handleToggle}
+          onRemove={handleRemove}
+          onSwap={handleSwap}
+          onAddFromPool={handleAddFromPool}
+          onAddCustom={handleAddCustom}
           onStart={handleStart}
         />
       )}

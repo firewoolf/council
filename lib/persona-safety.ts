@@ -152,6 +152,33 @@ export function sanitizePanel(
   return { cast, notes };
 }
 
+/**
+ * 사회자 archetype 을 cast 에 자동 포함시킨다.
+ *
+ * picking 화면 진입 시 / 운영자가 사회자를 제거하지 못하게 막는 안전망.
+ * 이미 cast 에 facilitator 가 있으면 그대로 반환.
+ */
+export function ensureFacilitator(cast: CastMember[]): CastMember[] {
+  if (cast.some((m) => m.isFacilitator)) return cast;
+  const fArch = PERSONA_MAP[FACILITATOR_ID];
+  if (!fArch) return cast;
+  return [
+    ...cast,
+    {
+      id: FACILITATOR_ID,
+      source: 'archetype',
+      archetypeId: FACILITATOR_ID,
+      name: fArch.name,
+      role: fArch.role,
+      temperament: fArch.temperament,
+      stance: '',
+      colorFrom: fArch.colorFrom,
+      colorTo: fArch.colorTo,
+      isFacilitator: true,
+    },
+  ];
+}
+
 /** 한 id 가 현재 등록된 페르소나에 존재하는지. */
 export function isKnownPersonaId(id: string): boolean {
   return Boolean(PERSONA_MAP[id]);

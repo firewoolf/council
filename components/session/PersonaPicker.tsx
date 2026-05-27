@@ -1,94 +1,128 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown, Users } from 'lucide-react';
+import { ChevronDown, Users, X } from 'lucide-react';
 
 import { PersonaCard } from '@/components/persona/PersonaCard';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
-import { PERSONAS, PERSONA_MAP } from '@/lib/prompts/personas';
+import { Textarea } from '@/components/ui/textarea';
+import { PERSONAS, TEMPERAMENT_LABEL_KR } from '@/lib/prompts/personas';
+import { TEMPERAMENT_COLORS } from '@/lib/persona-safety';
 import { cn } from '@/lib/utils';
-import type { Archetype as Persona, CastMember } from '@/types/persona';
+import type { CastMember, Temperament } from '@/types/persona';
+
+const FACILITATOR_ID = 'facilitator';
+const DOMAIN_EXPERT_ID = 'domain-expert';
+
+/** 커스텀 페르소나 입력 (자유 프롬프트 없음 — 4필드만). */
+export interface CustomPersonaInput {
+  name: string;
+  role: string;
+  temperament: Temperament;
+  stance: string;
+}
 
 interface PersonaPickerProps {
-  /** AI가 추천한 personaId 목록 (보통 3개) */
-  recommendedIds: string[];
-  /** personaId → 추천 사유 매핑 */
+  /** 현재 패널의 모든 멤버 (archetype + generated + custom + 사회자). */
+  cast: CastMember[];
+  /** archetype 멤버용 추천 사유 맵 (archetypeId → reason). */
   reasons: Record<string, string>;
-  /**
-   * Phase A — personaId → 추천기가 배정한 입장(한 줄).
-   * 추천된 3명에게만 들어있다. 풀에서 추가한 페르소나는 없음(중립).
-   */
-  stances: Record<string, string>;
-  /** 동적 분야 (도메인 전문가용) */
+  /** 추천기가 감지한 도메인 표시용. */
   domain: string | null;
-  /** 현재 선택된 personaId 목록 (사회자 포함) */
-  selectedIds: string[];
-  /**
-   * Phase B-2 — generated CastMember 목록 (항상 포함, 토글 불가).
-   * §5.1 검증 슬라이스 용 최소 배선. §5.6 전체 재작성 시 props 구조 교체 예정.
-   */
-  generatedCast?: CastMember[];
-  onToggle: (personaId: string) => void;
+  onRemove: (memberId: string) => void;
+  /** archetype 멤버 swap — onSwapStart 단계는 picker 내부에서 처리. */
+  onSwap: (memberId: string, newArchetypeId: string) => void;
+  onAddFromPool: (archetypeId: string) => void;
+  onAddCustom: (input: CustomPersonaInput) => void;
   onStart: () => void;
   busy?: boolean;
 }
 
-const FACILITATOR_ID = 'facilitator';
-
 /**
- * 추천 결과 + 풀에서 추가 선택하는 화면.
+ * picking 화면 — cast 단일 prop 기반.
  *
- * 구성:
- *   - 상단: AI 추천 3명 (자동 선택됨, 이유 표시)
- *   - 사회자(facilitator) — 항상 자동 포함, 토글 불가
- *   - "다른 페르소나 추가" 접힘식: 풀에서 토글로 추가/제거
- *   - 하단 sticky: 현재 패널 미리보기 + "회의 시작"
- *
- * 모바일 퍼스트 — 모든 동작은 탭 한 번. 드래그는 다음 마일스톤.
+ * 구조:
+ *   - 헤더 + 감지된 분야 칩
+ *   - 패널 통합 리스트 (archetype/generated/custom 한 줄, 사회자 별도 카드)
+ *   - "다른 페르소나 추가" 접힘 (아키타입 풀)
+ *   - "직접 만들기" 접힘 (커스텀 폼 — 자유 프롬프트 입력 없음)
+ *   - 사회자 자동 포함 안내
+ *   - sticky 하단: orb 미리보기 + 회의 시작
  */
 export function PersonaPicker({
-  recommendedIds,
+  cast,
   reasons,
-  stances,
   domain,
-  selectedIds,
-  generatedCast = [],
-  onToggle,
+  onRemove,
+  onSwap,
+  onAddFromPool,
+  onAddCustom,
   onStart,
   busy,
 }: PersonaPickerProps) {
   const [poolOpen, setPoolOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
 
-  const recommended = useMemo<Persona[]>(
-    () =>
-      recommendedIds
-        .map((id) => PERSONA_MAP[id])
-        .filter((p): p is Persona => Boolean(p)),
-    [recommendedIds],
+  // swap 후보 모달 상태 — 어떤 멤버를 교체 중인지
+  const [swapTargetId, setSwapTargetId] = useState<string | null>(null);
+
+  // 패널에 보이는 멤버 — 사회자는 별도 카드로
+  const panelMembers = useMemo(
+    () => cast.filter((m) => !m.isFacilitator),
+    [cast],
   );
 
-  // 추천에 없는 나머지 페르소나. 사회자는 별도 취급이라 제외.
-  const poolOthers = useMemo<Persona[]>(
+  const facilitator = useMemo(
+    () => cast.find((m) => m.isFacilitator) ?? null,
+    [cast],
+  );
+
+  // 풀에서 보여줄 아키타입 — 이미 cast 에 있는 archetypeId 와 facilitator/domain-expert 제외
+  const usedArchetypeIds = useMemo(
+    () => new Set(cast.map((m) => m.archetypeId).filter(Boolean) as string[]),
+    [cast],
+  );
+
+  const poolArchetypes = useMemo(
     () =>
       PERSONAS.filter(
         (p) =>
-          !recommendedIds.includes(p.id) && p.id !== FACILITATOR_ID,
+          !usedArchetypeIds.has(p.id) &&
+          p.id !== FACILITATOR_ID &&
+          p.id !== DOMAIN_EXPERT_ID,
       ),
-    [recommendedIds],
+    [usedArchetypeIds],
   );
 
-  const selectedSet = new Set(selectedIds);
-  const selectedPersonas = selectedIds
-    .map((id) => PERSONA_MAP[id])
-    .filter((p): p is Persona => Boolean(p));
+  // swap 후보 — 풀과 동일하지만 swap 대상 자신의 archetypeId 는 후보에서 빠지지 않게
+  const swapCandidates = useMemo(() => {
+    if (!swapTargetId) return [];
+    const target = cast.find((m) => m.id === swapTargetId);
+    const targetArchId = target?.archetypeId;
+    return PERSONAS.filter(
+      (p) =>
+        p.id !== FACILITATOR_ID &&
+        p.id !== DOMAIN_EXPERT_ID &&
+        (p.id === targetArchId || !usedArchetypeIds.has(p.id)),
+    );
+  }, [swapTargetId, cast, usedArchetypeIds]);
 
-  // Bottom preview: archetype selected + all generated
-  const previewOrbs: Array<Pick<CastMember, 'name' | 'colorFrom' | 'colorTo'>> = [
-    ...selectedPersonas,
-    ...generatedCast,
-  ];
-  const previewCount = selectedPersonas.length + generatedCast.length;
+  const previewOrbs = cast.map((m) => ({
+    name: m.name,
+    colorFrom: m.colorFrom,
+    colorTo: m.colorTo,
+  }));
+  const previewCount = cast.length;
+
+  function handleSwapStart(memberId: string) {
+    setSwapTargetId(memberId);
+  }
+  function handleSwapPick(archetypeId: string) {
+    if (!swapTargetId) return;
+    onSwap(swapTargetId, archetypeId);
+    setSwapTargetId(null);
+  }
 
   return (
     <section className="flex flex-col gap-6 pb-32">
@@ -98,8 +132,8 @@ export function PersonaPicker({
           이 사람들이 토론할 거예요.
         </h1>
         <p className="text-sm leading-relaxed text-text-muted sm:text-base">
-          AI가 당신의 고민에 가장 잘 맞는 3명을 골랐습니다. 마음에 들지 않으면
-          빼거나 다른 페르소나를 추가할 수 있습니다.
+          AI 가 당신의 고민에 맞춰 패널을 설계했습니다. 카드의 ⋯ 메뉴로 교체·제거,
+          또는 아키타입에서 추가하거나 직접 만들 수도 있습니다.
         </p>
         {domain && (
           <p className="text-xs text-text-muted">
@@ -111,86 +145,57 @@ export function PersonaPicker({
         )}
       </div>
 
-      {/* 추천 3명 */}
+      {/* 패널 — 통합 단일 리스트 */}
       <div className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
-          AI 추천
+          패널 ({panelMembers.length}명)
         </h2>
         <div className="flex flex-col gap-3">
-          {recommended.map((p) => (
+          {panelMembers.map((m) => (
             <PersonaCard
-              key={p.id}
-              persona={p}
-              selected={selectedSet.has(p.id)}
-              recommendReason={reasons[p.id]}
-              stance={stances[p.id]}
-              domain={undefined}
-              onToggle={onToggle}
+              key={m.id}
+              member={m}
+              recommendReason={
+                m.archetypeId ? reasons[m.archetypeId] : undefined
+              }
+              showActions
+              onRemove={onRemove}
+              onSwapStart={
+                m.source === 'archetype' ? handleSwapStart : undefined
+              }
             />
           ))}
+          {panelMembers.length === 0 && (
+            <p className="rounded-md border border-dashed border-border bg-surface/40 p-6 text-center text-xs text-text-muted">
+              패널이 비어있습니다. 아래에서 페르소나를 추가하세요.
+            </p>
+          )}
         </div>
       </div>
 
-      {/* generated 멤버 (항상 포함, 토글 불가) */}
-      {generatedCast.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
-            즉석 설계 전문가
-          </h2>
-          <div className="flex flex-col gap-3">
-            {generatedCast.map((m) => (
-              <div
-                key={m.id}
-                className="relative flex w-full items-start gap-4 rounded-xl border border-primary/40 bg-surface-2 p-4"
-                style={{ borderLeftWidth: 4, borderLeftColor: m.colorTo }}
-              >
-                <PersonaOrb persona={m} size={56} glow="soft" className="mt-0.5" />
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <h3 className="truncate text-base font-semibold text-text">{m.name}</h3>
-                    <span className="shrink-0 rounded-full bg-primary/20 px-2 py-0.5 text-[10px] font-medium text-primary">
-                      자동 포함
-                    </span>
-                  </div>
-                  <p className="line-clamp-1 text-xs text-text-muted">{m.role}</p>
-                  {m.stance && (
-                    <p className="line-clamp-2 rounded-md border-l-2 border-accent/60 bg-accent/10 px-2 py-1 text-xs leading-relaxed text-text/90">
-                      <span className="mr-1 font-semibold text-accent">입장</span>
-                      {m.stance}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
+      {/* 사회자 자동 포함 안내 */}
+      {facilitator && (
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 p-4">
+          <PersonaOrb persona={facilitator} size={40} glow="soft" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-text">
+              사회자는 자동으로 참여합니다
+            </p>
+            <p className="text-xs text-text-muted">
+              토론 진행과 결론 정리를 담당합니다.
+            </p>
           </div>
         </div>
       )}
 
-      {/* 사회자 (자동 포함, 정보성) */}
-      <div className="flex items-center gap-3 rounded-xl border border-border bg-surface/60 p-4">
-        <PersonaOrb
-          persona={PERSONA_MAP[FACILITATOR_ID]!}
-          size={40}
-          glow="soft"
-        />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-text">
-            사회자는 자동으로 참여합니다
-          </p>
-          <p className="text-xs text-text-muted">
-            토론 진행과 결론 정리를 담당합니다.
-          </p>
-        </div>
-      </div>
-
-      {/* 다른 페르소나 추가 (접힘) */}
+      {/* 다른 페르소나 추가 (아키타입 풀) */}
       <div className="space-y-3">
         <button
           type="button"
           onClick={() => setPoolOpen((v) => !v)}
           className="flex w-full items-center justify-between rounded-md px-1 py-2 text-sm font-semibold uppercase tracking-wider text-text-muted hover:text-text"
         >
-          <span>다른 페르소나 추가 ({poolOthers.length}명)</span>
+          <span>다른 페르소나 추가 ({poolArchetypes.length})</span>
           <ChevronDown
             className={cn(
               'size-4 transition-transform',
@@ -200,20 +205,114 @@ export function PersonaPicker({
         </button>
         {poolOpen && (
           <div className="flex flex-col gap-3 animate-fade-in">
-            {poolOthers.map((p) => (
-              <PersonaCard
-                key={p.id}
-                persona={p}
-                selected={selectedSet.has(p.id)}
-                domain={undefined}
-                onToggle={onToggle}
-              />
-            ))}
+            {poolArchetypes.length === 0 ? (
+              <p className="rounded-md bg-surface-2 p-3 text-center text-xs text-text-muted">
+                추가 가능한 아키타입이 없습니다 (모두 패널에 포함됨).
+              </p>
+            ) : (
+              poolArchetypes.map((p) => {
+                const poolMember: CastMember = {
+                  id: p.id,
+                  source: 'archetype',
+                  archetypeId: p.id,
+                  name: p.name,
+                  role: p.role,
+                  temperament: p.temperament,
+                  stance: '',
+                  colorFrom: p.colorFrom,
+                  colorTo: p.colorTo,
+                };
+                return (
+                  <PersonaCard
+                    key={p.id}
+                    member={poolMember}
+                    showActions={false}
+                    onPick={onAddFromPool}
+                  />
+                );
+              })
+            )}
           </div>
         )}
       </div>
 
-      {/* 하단 sticky — 현재 패널 + 회의 시작 */}
+      {/* 직접 만들기 (커스텀 폼) */}
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setCustomOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-md px-1 py-2 text-sm font-semibold uppercase tracking-wider text-text-muted hover:text-text"
+        >
+          <span>직접 만들기</span>
+          <ChevronDown
+            className={cn(
+              'size-4 transition-transform',
+              customOpen && 'rotate-180',
+            )}
+          />
+        </button>
+        {customOpen && (
+          <CustomPersonaForm
+            onSubmit={(input) => {
+              onAddCustom(input);
+              setCustomOpen(false);
+            }}
+            onCancel={() => setCustomOpen(false)}
+          />
+        )}
+      </div>
+
+      {/* swap 후보 모달 */}
+      {swapTargetId && (
+        <div
+          className="fixed inset-0 z-30 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center"
+          onClick={() => setSwapTargetId(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-2xl border border-border bg-surface p-4 sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-text">
+                교체할 아키타입 선택
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSwapTargetId(null)}
+                aria-label="닫기"
+                className="text-text-muted hover:text-text"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="flex max-h-[60vh] flex-col gap-2 overflow-y-auto">
+              {swapCandidates.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => handleSwapPick(p.id)}
+                  className="flex items-center gap-3 rounded-md border border-border bg-surface-2 p-2.5 text-left transition-colors hover:border-primary/40"
+                >
+                  <PersonaOrb persona={p} size={36} glow="none" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-text">
+                      {p.name}
+                    </p>
+                    <p className="truncate text-xs text-text-muted">
+                      {p.role}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-surface px-2 py-0.5 font-mono text-[10px] text-text-muted">
+                    {TEMPERAMENT_LABEL_KR[p.temperament]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* sticky 하단 */}
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-2xl items-center gap-3 px-4 py-3 sm:px-6">
           <div className="flex -space-x-2">
@@ -248,5 +347,158 @@ export function PersonaPicker({
         </div>
       </div>
     </section>
+  );
+}
+
+// ─── 커스텀 폼 ──────────────────────────────────────────────────────────────
+
+interface CustomPersonaFormProps {
+  onSubmit: (input: CustomPersonaInput) => void;
+  onCancel: () => void;
+}
+
+const TEMPERAMENTS: readonly Temperament[] = [
+  'advocate',
+  'critic',
+  'analyst',
+  'provocateur',
+  'empath',
+];
+
+function CustomPersonaForm({ onSubmit, onCancel }: CustomPersonaFormProps) {
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('');
+  const [temperament, setTemperament] = useState<Temperament | null>(null);
+  const [stance, setStance] = useState('');
+  const [errors, setErrors] = useState<Partial<Record<'name' | 'role' | 'temperament' | 'stance', string>>>({});
+
+  function validate(): Partial<Record<'name' | 'role' | 'temperament' | 'stance', string>> {
+    const err: typeof errors = {};
+    const trimmedName = name.trim();
+    const trimmedRole = role.trim();
+    const trimmedStance = stance.trim();
+    if (trimmedName.length < 1 || trimmedName.length > 20) {
+      err.name = '이름은 1~20자 사이';
+    }
+    if (trimmedRole.length < 1 || trimmedRole.length > 40) {
+      err.role = '역할은 1~40자 사이';
+    }
+    if (!temperament) {
+      err.temperament = '성향을 선택해주세요';
+    }
+    if (trimmedStance.length < 1 || trimmedStance.length > 120) {
+      err.stance = '입장은 1~120자 사이';
+    }
+    return err;
+  }
+
+  function handleSubmit() {
+    const err = validate();
+    setErrors(err);
+    if (Object.keys(err).length > 0) return;
+    onSubmit({
+      name: name.trim(),
+      role: role.trim(),
+      temperament: temperament!,
+      stance: stance.trim(),
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface/60 p-4 animate-fade-in">
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-text-muted">이름</label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="예: 베테랑 수의사"
+          maxLength={30}
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary/60"
+        />
+        {errors.name && (
+          <p className="text-[11px] text-rose-300">{errors.name}</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-text-muted">한 줄 역할</label>
+        <input
+          type="text"
+          value={role}
+          onChange={(e) => setRole(e.target.value)}
+          placeholder="예: 동물병원 10년차 원장"
+          maxLength={60}
+          className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary/60"
+        />
+        {errors.role && (
+          <p className="text-[11px] text-rose-300">{errors.role}</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-text-muted">성향</label>
+        <div className="flex flex-wrap gap-1.5">
+          {TEMPERAMENTS.map((t) => {
+            const active = temperament === t;
+            const colors = TEMPERAMENT_COLORS[t];
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTemperament(t)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                  active
+                    ? 'border-transparent text-white'
+                    : 'border-border text-text-muted hover:text-text',
+                )}
+                style={
+                  active
+                    ? {
+                        background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
+                      }
+                    : { borderColor: `${colors.to}55` }
+                }
+              >
+                {TEMPERAMENT_LABEL_KR[t]}
+              </button>
+            );
+          })}
+        </div>
+        {errors.temperament && (
+          <p className="text-[11px] text-rose-300">{errors.temperament}</p>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-text-muted">
+          이 고민에서의 입장
+        </label>
+        <Textarea
+          rows={2}
+          value={stance}
+          onChange={(e) => setStance(e.target.value)}
+          placeholder='예: "SaaS 보다 종이 차트가 낫다고 주장한다 — 도입 비용보다 운영 부담이 크다"'
+          maxLength={160}
+          className="min-h-[64px]"
+        />
+        <p className="text-[10px] text-text-muted">
+          성향이 아니라 *주장* 으로 — &ldquo;비판적이다&rdquo; ✗ / &ldquo;X 하지 말라&rdquo; ✓
+        </p>
+        {errors.stance && (
+          <p className="text-[11px] text-rose-300">{errors.stance}</p>
+        )}
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onCancel}>
+          취소
+        </Button>
+        <Button size="sm" onClick={handleSubmit}>
+          추가
+        </Button>
+      </div>
+    </div>
   );
 }
