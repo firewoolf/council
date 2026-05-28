@@ -4,20 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { MessageCard } from './MessageCard';
-import { TypingIndicator } from './TypingIndicator';
 import { cn } from '@/lib/utils';
-import type { Message } from '@/types/debate';
+import type { ChunkMeta, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
 interface DebateFeedProps {
-  messages: readonly Message[];
   /**
-   * 세션의 전체 캐스트. 발언자 조회의 단일 진실 공급원.
-   * Phase B-2 §5.7 — generated/custom 멤버가 등장하므로 PERSONA_MAP 라이브 조회는 안 한다.
+   * 렌더 대상 메시지 — useDebate 의 revealedMessages.
+   * 재생 진행 분만 포함된다. 새로고침 시엔 전부 들어있다(half-state 없음).
    */
+  messages: readonly Message[];
+  /** 세션의 전체 캐스트. 발언자 조회의 단일 진실 공급원. */
   cast: readonly CastMember[];
-  /** 현재 발언 생성 중인 멤버 — 보이는 동안 TypingIndicator 표시 */
-  thinkingMember: CastMember | null;
+  /** 트랙 ⑤-1 — 세션의 청크 메타. 메시지를 청크 단위로 묶어 렌더하기 위함. */
+  chunks: readonly ChunkMeta[];
   /** 회의 시작 전 안내 — 발언이 아직 없을 때 표시 */
   emptyHint?: string;
 }
@@ -26,20 +26,24 @@ interface DebateFeedProps {
 const NEAR_BOTTOM_PX = 240;
 
 /**
- * 토론 피드.
+ * 토론 피드 — 트랙 ⑤-1.
  *
- * 스크롤 정책 (2026-05-26 — 자동 스크롤 자율화):
- *   - 사용자가 *바닥 근처* 에 있을 때만 새 메시지 도착 시 자동으로 따라간다.
- *   - 사용자가 위로 올려 읽고 있으면 강제 점프 금지. 대신 "↓ N개 새 발언" 배지로 알림.
- *   - 배지 클릭 → 바닥으로 부드럽게 점프. 사용자가 직접 바닥에 가까이 가도 자동 해제.
+ * 청크 단위 그루핑:
+ *   - 같은 chunkId 를 가진 메시지를 한 묶음으로 둘러 렌더.
+ *   - 청크 사이에 얇은 separator + (있다면) 청크가 다룬 소주제 칩.
+ *   - chunkId 없는 옛 메시지(마이그레이션 무중단)는 "플랫" 섹션 하나로 묶어 위에 표시.
  *
- * 윈도우 스크롤 기준. DebateFeed 가 자체 스크롤 컨테이너가 아니라
- * 페이지 흐름의 일부이기 때문에 document.scrollingElement / window.scrollY 로 측정.
+ * 스크롤 정책 (자율화 유지):
+ *   - 사용자가 바닥 근처면 새 메시지 도착 시 자동으로 따라감.
+ *   - 위로 올려 읽고 있으면 강제 점프 금지 — "↓ N개 새 발언" 배지로 알림.
+ *   - 배지 클릭 → 부드럽게 바닥으로.
+ *
+ * 윈도우 스크롤 기준. DebateFeed 는 자체 스크롤 컨테이너가 아니다.
  */
 export function DebateFeed({
   messages,
   cast,
-  thinkingMember,
+  chunks,
   emptyHint,
 }: DebateFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -54,7 +58,6 @@ export function DebateFeed({
     return distanceFromBottom < NEAR_BOTTOM_PX;
   }, []);
 
-  // 스크롤 위치 추적 — passive 리스너로 비용 거의 0
   useEffect(() => {
     function onScroll() {
       const atBottom = measureNearBottom();
@@ -62,13 +65,10 @@ export function DebateFeed({
       if (atBottom) setUnreadCount(0);
     }
     window.addEventListener('scroll', onScroll, { passive: true });
-    // 초기값 보정
     setIsNearBottom(measureNearBottom());
     return () => window.removeEventListener('scroll', onScroll);
   }, [measureNearBottom]);
 
-  // 새 메시지 / 생각 중 멤버 변화에 반응
-  // 사용자가 바닥 근처면 자동 따라가고, 아니면 unread 누적.
   const prevMessageCount = useRef(messages.length);
   useEffect(() => {
     const delta = messages.length - prevMessageCount.current;
@@ -82,36 +82,72 @@ export function DebateFeed({
     }
   }, [messages.length, isNearBottom]);
 
-  // 생각 중 멤버는 토론 흐름의 신호 — 바닥 근처면 같이 따라감, 아니면 무시.
-  // 의존성에 thinkingMember 객체 전체가 아닌 id 만 — 다른 필드 변경엔 반응 안 함.
-  const thinkingId = thinkingMember?.id ?? null;
-  useEffect(() => {
-    if (!thinkingId) return;
-    if (isNearBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-  }, [thinkingId, isNearBottom]);
-
   const jumpToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
     setUnreadCount(0);
   }, []);
 
-  /** id → 메시지 매핑 (반박 대상 lookup 용) */
+  /** id → 메시지 (반박 대상 lookup) */
   const messageById = useMemo(() => {
     const map = new Map<string, Message>();
     for (const m of messages) map.set(m.id, m);
     return map;
   }, [messages]);
 
-  /** id → CastMember 매핑 (발언자 조회용) */
+  /** id → CastMember */
   const castMap = useMemo(() => {
     const map = new Map<string, CastMember>();
     for (const c of cast) map.set(c.id, c);
     return map;
   }, [cast]);
 
-  if (messages.length === 0 && !thinkingMember && emptyHint) {
+  /**
+   * 청크 단위 그루핑.
+   * 결과 구조: [{ chunkId: undefined, messages: [...] }, { chunkId: 'xxx', meta, messages: [...] }, ...]
+   * chunkId 없는 옛 메시지가 있으면 맨 앞 단일 그룹으로 둔다.
+   */
+  const groups = useMemo(() => {
+    const chunkMetaById = new Map(chunks.map((c) => [c.id, c]));
+    const out: {
+      key: string;
+      meta: ChunkMeta | null;
+      messages: Message[];
+    }[] = [];
+
+    const flat: Message[] = [];
+    const byChunk = new Map<string, Message[]>();
+
+    for (const m of messages) {
+      if (!m.chunkId) {
+        flat.push(m);
+        continue;
+      }
+      const arr = byChunk.get(m.chunkId) ?? [];
+      arr.push(m);
+      byChunk.set(m.chunkId, arr);
+    }
+
+    if (flat.length > 0) {
+      out.push({ key: '__flat__', meta: null, messages: flat });
+    }
+
+    // chunks 의 등록 순서를 유지 — chunks 배열 순서대로 그룹을 만든다.
+    for (const c of chunks) {
+      const msgs = byChunk.get(c.id);
+      if (!msgs || msgs.length === 0) continue;
+      out.push({ key: c.id, meta: c, messages: msgs });
+    }
+
+    // chunks 에 없는데 messages 에는 chunkId 가 박힌 경우(드물지만 fallback)
+    for (const [cid, msgs] of byChunk) {
+      if (chunkMetaById.has(cid)) continue;
+      out.push({ key: cid, meta: null, messages: msgs });
+    }
+
+    return out;
+  }, [messages, chunks]);
+
+  if (messages.length === 0 && emptyHint) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-surface/40 p-8 text-center">
         <p className="text-sm leading-relaxed text-text-muted">{emptyHint}</p>
@@ -122,47 +158,58 @@ export function DebateFeed({
   const showUnreadBadge = !isNearBottom && unreadCount > 0;
 
   return (
-    <div className="flex flex-col gap-3">
-      {messages.map((m) => {
-        const speaker =
-          m.speakerId !== null ? (castMap.get(m.speakerId) ?? null) : null;
+    <div className="flex flex-col gap-6">
+      {groups.map((g, idx) => (
+        <section key={g.key} className="flex flex-col gap-3">
+          {/* 청크 헤더 — 두 번째 그룹부터 표시 (첫 청크/플랫 그룹은 헤더 없이) */}
+          {idx > 0 && g.meta && (
+            <div className="flex items-center gap-3 pt-1">
+              <div className="h-px flex-1 bg-border" />
+              <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-medium text-text-muted">
+                {chunkLabel(g.meta)}
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
 
-        let replyTarget: { speakerName: string; preview: string } | null = null;
-        if (m.replyTo) {
-          const target = messageById.get(m.replyTo);
-          if (target && target.speakerId) {
-            const tp = castMap.get(target.speakerId);
-            if (tp) {
-              replyTarget = {
-                speakerName: tp.name,
-                preview:
-                  target.content.length > 24
-                    ? `${target.content.slice(0, 22)}…`
-                    : target.content,
-              };
-            }
-          }
-        }
+          <div className="flex flex-col gap-3">
+            {g.messages.map((m) => {
+              const speaker =
+                m.speakerId !== null ? (castMap.get(m.speakerId) ?? null) : null;
 
-        return (
-          <MessageCard
-            key={m.id}
-            message={m}
-            speaker={speaker}
-            replyTarget={replyTarget}
-          />
-        );
-      })}
+              let replyTarget: { speakerName: string; preview: string } | null =
+                null;
+              if (m.replyTo) {
+                const target = messageById.get(m.replyTo);
+                if (target && target.speakerId) {
+                  const tp = castMap.get(target.speakerId);
+                  if (tp) {
+                    replyTarget = {
+                      speakerName: tp.name,
+                      preview:
+                        target.content.length > 24
+                          ? `${target.content.slice(0, 22)}…`
+                          : target.content,
+                    };
+                  }
+                }
+              }
 
-      {thinkingMember && <TypingIndicator persona={thinkingMember} />}
+              return (
+                <MessageCard
+                  key={m.id}
+                  message={m}
+                  speaker={speaker}
+                  replyTarget={replyTarget}
+                />
+              );
+            })}
+          </div>
+        </section>
+      ))}
 
       <div ref={bottomRef} />
 
-      {/*
-        새 발언 알림 배지 — 사용자가 위로 올려놓고 읽는 동안 새 발언이 쌓이면 표시.
-        DebateControls(하단 sticky)와 겹치지 않도록 bottom 여백 유지.
-        클릭 시 부드럽게 바닥으로 점프.
-      */}
       {showUnreadBadge && (
         <button
           type="button"
@@ -180,4 +227,9 @@ export function DebateFeed({
       )}
     </div>
   );
+}
+
+function chunkLabel(meta: ChunkMeta): string {
+  if (meta.topic === '_first') return '오프닝';
+  return meta.topic.length > 24 ? `${meta.topic.slice(0, 22)}…` : meta.topic;
 }

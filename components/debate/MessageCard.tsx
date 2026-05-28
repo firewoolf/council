@@ -65,7 +65,11 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
   return (
     <div
       className={cn(
-        'relative flex flex-col gap-2 rounded-xl border border-border bg-surface p-4 animate-fade-in',
+        'relative flex flex-col gap-2 rounded-xl border bg-surface p-4 animate-fade-in',
+        // 트랙 ⑤-1 — isKeyPoint 최소 강조 (정교한 시인성은 ⑤-2)
+        message.isKeyPoint
+          ? 'border-accent/50 bg-accent/[0.04]'
+          : 'border-border',
       )}
       style={{
         borderLeftWidth: 4,

@@ -5,7 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import type { Conclusion } from '@/lib/prompts/orchestrator';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
-import type { Message, Session } from '@/types/debate';
+import type { ChunkMeta, Message, Session } from '@/types/debate';
 import type { Archetype, CastMember } from '@/types/persona';
 
 /**
@@ -34,6 +34,11 @@ interface SessionsState {
   messages: Record<string, Message[]>;
   domains: Record<string, string | null>;
   conclusions: Record<string, Conclusion>;
+  /**
+   * 트랙 ⑤-1 — 세션별 청크 메타 목록. 가산적 필드 — 청크 이전 세션은 undefined.
+   * turn 본문은 그대로 messages 에 평면 저장. 여기엔 topic·nextTopics·chosenNext 만.
+   */
+  sessionChunks?: Record<string, ChunkMeta[]>;
 
   createSession: (input: {
     concern: string;
@@ -49,6 +54,8 @@ interface SessionsState {
   getDomain: (id: string) => string | null;
   getMessages: (id: string) => Message[];
   getConclusion: (id: string) => Conclusion | null;
+  /** 트랙 ⑤-1 — 항상 ?? [] 폴백. 청크 이전 세션이면 빈 배열. */
+  getChunks: (id: string) => ChunkMeta[];
 
   appendMessage: (sessionId: string, message: Message) => void;
   updateCast: (sessionId: string, cast: CastMember[]) => void;
@@ -58,6 +65,15 @@ interface SessionsState {
   updateSessionProvider: (
     sessionId: string,
     provider: Session['aiProvider'],
+  ) => void;
+
+  /** 트랙 ⑤-1 — 새 청크 메타 추가. */
+  addChunk: (sessionId: string, chunk: ChunkMeta) => void;
+  /** 트랙 ⑤-1 — 갈림길에서 사용자가 고른 다음 소주제를 청크에 기록. */
+  updateChunkChoice: (
+    sessionId: string,
+    chunkId: string,
+    chosenNextLabel: string,
   ) => void;
 
   /** 결론 저장 시 status를 concluded로 자동 전환 */
@@ -140,6 +156,7 @@ export const useSessionsStore = create<SessionsState>()(
       messages: {},
       domains: {},
       conclusions: {},
+      sessionChunks: {},
 
       createSession: ({ concern, title, cast, aiProvider, domain }) => {
         const id = generateId();
@@ -169,6 +186,7 @@ export const useSessionsStore = create<SessionsState>()(
       getDomain: (id) => get().domains[id] ?? null,
       getMessages: (id) => get().messages[id] ?? [],
       getConclusion: (id) => get().conclusions[id] ?? null,
+      getChunks: (id) => get().sessionChunks?.[id] ?? [],
 
       saveConclusion: (sessionId, conclusion) =>
         set((s) => {
@@ -206,6 +224,32 @@ export const useSessionsStore = create<SessionsState>()(
           };
         }),
 
+      addChunk: (sessionId, chunk) =>
+        set((s) => {
+          const prev = s.sessionChunks?.[sessionId] ?? [];
+          return {
+            sessionChunks: {
+              ...(s.sessionChunks ?? {}),
+              [sessionId]: [...prev, chunk],
+            },
+          };
+        }),
+
+      updateChunkChoice: (sessionId, chunkId, chosenNextLabel) =>
+        set((s) => {
+          const prev = s.sessionChunks?.[sessionId];
+          if (!prev) return s;
+          const next = prev.map((c) =>
+            c.id === chunkId ? { ...c, chosenNextLabel } : c,
+          );
+          return {
+            sessionChunks: {
+              ...(s.sessionChunks ?? {}),
+              [sessionId]: next,
+            },
+          };
+        }),
+
       concludeSession: (id) =>
         set((s) => {
           const current = s.sessions[id];
@@ -230,12 +274,15 @@ export const useSessionsStore = create<SessionsState>()(
           delete nextDomains[id];
           const nextConclusions = { ...s.conclusions };
           delete nextConclusions[id];
+          const nextChunks = { ...(s.sessionChunks ?? {}) };
+          delete nextChunks[id];
           return {
             sessions: nextSessions,
             sessionCast: nextCast,
             messages: nextMessages,
             domains: nextDomains,
             conclusions: nextConclusions,
+            sessionChunks: nextChunks,
           };
         }),
 

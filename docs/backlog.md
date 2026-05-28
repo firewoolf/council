@@ -7,18 +7,13 @@
 
 ## Active
 
-### 트랙① Phase B-2 — 동적 생성 + 커스텀 + picker 재작성
-워크오더 `docs/workorder-persona-B-cast.md` §5. **진행 중.**
-진행 가이드(체크포인트·역할 분담): `docs/plan-track1-phase-b-completion.md` (Opus, 2026-05-26).
-CP3 워크오더 부록(§5.6): `docs/workorder-persona-B-cast-cp3.md` (Opus, 2026-05-26).
-CP4 워크오더 부록(§5.7~§5.8): `docs/workorder-persona-B-cast-cp4.md` (Opus, 2026-05-26).
-
-### 트랙 ⑤-1 청크 엔진 — Gold Standard 박제
-Phase B 완주 직후 진입 예정. 워크오더 `docs/workorder-debate-5-1-chunk-engine.md` 본체 존재.
+### 트랙 ⑤-1 청크 엔진 — 다음 진입 1순위
+Phase B 완주로 진입 가능 상태. 워크오더 `docs/workorder-debate-5-1-chunk-engine.md` 본체 존재.
 Gold standard 예시(LLM 한 호출이 재현해야 할 청크 산출물): `docs/example-target-discussion.md` (Opus, 2026-05-26).
 구현 시 워크오더 본문 §3 chunkSchema 와 §4 buildChunkPrompt 가 example 의 표 §5 제약 6개를 강제해야 함.
+**핵심 새 제약 (어제 토론 결과):** `nextTopics` 의 ✦ 못 본 각도 1개 의무 (워크오더 부록 D 새 섹션).
 
-### 트랙 ① Phase E — 페르소나 모델 v2 (다축 trait)
+### 트랙 ① Phase E — 페르소나 모델 v2 (다축 trait) — 트랙 ⑤-1 이후
 워크오더 `docs/workorder-persona-E-multitrait.md` (Opus, 2026-05-26).
 **진단:** 현재 `Temperament` enum 5종이 stance·lens·expression 3축이 섞인 비-MECE 모델.
 잡스 같은 *옹호적·분석적·도발적* 조합 표현 불가.
@@ -26,28 +21,41 @@ Gold standard 예시(LLM 한 호출이 재현해야 할 청크 산출물): `docs
 **권장 순서:** 트랙 ⑤-1 청크 엔진 출하 *후* 진입 (모델 변경이 청크 프롬프트와 충돌 방지).
 출하 단위 2개: E-1 데이터 모델 + 마이그레이션 / E-2 추천기 + UI.
 
-**현재 커서 (2026-05-24):**
-- ✅ §5.1 검증 슬라이스 출하 — `panelDesignSchema`(느슨한 스키마: enum·min 제거),
-  `buildPanelDesignPrompt`, `designPanel`(client), `sanitizePanel`(정규화·강등·보충·dedupe),
-  `synthesizeCharacterPrompt`. `designPanel`을 new-session 흐름에 최소 배선 — picking
-  화면에 generated 멤버("즉석 설계 전문가") 표시까지.
-- ✅ 하드닝 — `panelMemberSchema`의 name/role/reason `.optional()`,
-  `sanitizePanel` generated 폴백(`'전문가'`/`'이 분야 전문가'`) + archetypeId dedupe.
-- ⏭️ **다음 할 일 = 운영자 라이브 §5.1 검증.** `/settings`에서 키 등록 후 비아키타입
-  분야 고민("동물병원 SaaS 만들지, 군 전역 후 다른 창업"類)으로 1세션 → picking
-  화면에서 generated 멤버 등장·stance 구체성·에러 여부 확인 (Gemini/Groq 각각, 키 하나씩).
-  picking 화면까지만 — 회의 시작 누르면 generated 발언자가 회의실에서 "???" 로 뜸(§5.7 미완, 정상).
-  에러 시 구분: (a) JSON 생성 자체 실패 → 스키마 평탄화 / (b) JSON 왔으나 부실 → sanitize·프롬프트 튜닝.
-- ⬜ §5.1 통과 후 B-2 본체: PersonaPicker 전체 재작성·커스텀 추가 폼·temperament 뱃지(§5.6),
-  렌더링 cast 전환(§5.7 — debate/summary/history 의 PERSONA_MAP 조회 → cast 조회),
-  `conclusionSchema.personaId` enum 해제(§5.8).
-
 ### 트랙① Phase B-3 (선택) — Supabase `session_cast` 마이그레이션
 미연결이라 블로킹 아님. 워크오더 §6.
 
 ---
 
 ## Done
+
+### 트랙① Phase B-2 — 동적 생성 + 커스텀 + picker 재작성 (commits 668bdcc, ac8dd1c)
+워크오더 `docs/workorder-persona-B-cast.md` §5. **출하 완료 (2026-05-26).**
+진행 가이드: `docs/plan-track1-phase-b-completion.md` (CP1~CP5, Opus 2026-05-26).
+**Opus 직접 구현** — CP3·CP4 워크오더 부록을 Opus 가 박제 후 본인이 실행. Sonnet 위임 없이 high-risk 변경 직접 처리.
+
+- **CP3 §5.6 PersonaPicker 재작성 + 커스텀 폼 (commit 668bdcc)**
+  · PersonaPicker props 를 `cast: CastMember[]` 단일 prop 으로 통합 (recommendedIds/stances/selectedIds/generatedCast 제거)
+  · PersonaCard 를 CastMember 기반 재작성, Archetype 의존 제거
+  · archetype/generated/custom 통합 단일 리스트 표시 (이전 *추천 / 즉석 설계* 분리 폐기)
+  · 카드 ⋯ 액션 메뉴 — archetype: swap/remove, generated/custom: remove
+  · '직접 만들기' 커스텀 폼 — 이름/역할/temperament/입장 4필드, 자유 프롬프트 입력 없음 (굴복 금지 원칙 자동 보호)
+  · swap 후보 모달 (bottom sheet on mobile)
+  · temperament 한국어 라벨 (`TEMPERAMENT_LABEL_KR`)
+  · `ensureFacilitator` 헬퍼 추출 (`lib/persona-safety.ts`)
+  · session/new/page.tsx 상태 5→3개 압축, 5개 핸들러 신규
+- **CP4 §5.7~§5.8 렌더링 cast 전환 + conclusionSchema enum 해제 (commit ac8dd1c)**
+  · 7파일 `PERSONA_MAP[speakerId]` 조회 → `cast` 직접 조회로 전환
+    (DebateFeed/MessageCard/session-[id]/summary/RecentSessions/history)
+  · `conclusionSchema.personaPositions[].personaId` z.enum → z.string (generated/custom uuid 수용)
+  · TypingIndicator props 를 `Pick<Archetype|CastMember>` 호환 확장
+  · UserInput `domain` prop 제거 (미사용)
+  · `.eslintrc.json` 첫 활성화 (8개 누적 에러 동시 처리)
+- **자동 스크롤 자율화 (DebateFeed) — UX 픽스 동시 출하**
+  · 운영자 피드백 반영: 페르소나 발언에 따라 화면 강제 점프하던 UX 사고 해결
+  · 사용자가 위로 스크롤하면 강제 점프 금지, 우하단 "↓ N개 새 발언" 배지로 알림
+  · 배지 클릭 → 부드럽게 점프
+  · 청크 엔진(트랙 ⑤-1) 도입 후에도 그대로 작동
+- §5.1 운영자 라이브 검증은 Opus 직접 구현으로 흡수, CP5 종합 시각 검수로 통합 확인됨.
 
 ### 트랙① Phase B-1 — 데이터 모델 마이그레이션 (commit 35e1433)
 워크오더 `docs/workorder-persona-B-cast.md` §4. "보이는 변화 0, 데이터 배관만" 출하.

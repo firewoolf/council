@@ -18,10 +18,12 @@ export type AiProvider =
 /**
  * LLM 호출 작업 종류 — provider 라우팅에 사용.
  * - recommend : 페르소나 추천 (세션당 1회, 복잡한 enum 스키마, 품질 우선)
- * - debate    : 토론 발언 생성 (턴당 1회 × 20-30회, 속도·RPM 우선)
+ * - debate    : 토론 발언 생성 (트랙 ⑤-1 청크 도입으로 잔존만 — 새 경로는 chunk)
  * - conclude  : 결론 생성 (세션당 1회, 4섹션 구조화 출력, 품질 우선)
+ * - chunk     : 트랙 ⑤-1 — 한 호출에 3~5턴 미니 장면 + nextTopics 동시 생성.
+ *               중첩 배열 구조화 출력 안정성 우선. §5-0 검증 결과에 따라 라우팅 조정.
  */
-export type AiTaskRole = 'recommend' | 'debate' | 'conclude';
+export type AiTaskRole = 'recommend' | 'debate' | 'conclude' | 'chunk';
 
 export interface ProviderConfig {
   id: AiProvider;
@@ -64,8 +66,10 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: true,
     accent: { from: '#4285F4', to: '#34A853' },
     freeTier: '분당 15회 / 일 1000회 무료 (Gemini 2.5 Flash-Lite 기준)',
-    // Gemini: 한국어·구조화 출력 안정 → 추천 + 결론에 강점
-    roles: ['recommend', 'conclude'],
+    // Gemini: 한국어·구조화 출력 안정 → 추천 + 결론 + 청크 (중첩 배열 안정성 필요)
+    // 트랙 ⑤-1 §5-0 — 라이브 검증 전이라 보수적 디폴트로 chunk 는 Gemini 고정.
+    // Groq 가 검증으로 안정 확인되면 groq.roles 에 'chunk' 추가 가능.
+    roles: ['recommend', 'conclude', 'chunk'],
   },
   groq: {
     id: 'groq',

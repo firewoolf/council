@@ -15,22 +15,22 @@ import {
 
 import { DebateControls } from '@/components/debate/DebateControls';
 import { DebateFeed } from '@/components/debate/DebateFeed';
-import { UserInput } from '@/components/debate/UserInput';
+import { SteeringPanel } from '@/components/debate/SteeringPanel';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { useDebate } from '@/hooks/useDebate';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { useSessionsStore } from '@/store/sessions';
-import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 
 /**
- * 실시간 자동 토론 회의실.
+ * 트랙 ⑤-1 — 청크 재생 + 갈림길 회의실.
  *
  * 레이아웃:
- *   - 상단: 고민 collapsible 헤더 (orb 미리보기 + 펼치면 전체 텍스트)
- *   - 본문: DebateFeed (메시지 + thinkingPersona)
- *   - 하단 sticky: DebateControls
+ *   - 상단: 고민 collapsible 헤더
+ *   - 본문: DebateFeed (revealedMessages)
+ *   - phase==='steering': SteeringPanel 등장 (피드 아래)
+ *   - 하단 sticky: DebateControls (재생 트랜스포트)
  */
 export default function SessionRoomPage() {
   const router = useRouter();
@@ -39,17 +39,24 @@ export default function SessionRoomPage() {
   const mounted = useHasMounted();
 
   const session = useSessionsStore((s) => s.sessions[id]);
-  const messages = useSessionsStore((s) => s.messages[id] ?? []);
   const cast = useSessionsStore((s) => s.sessionCast?.[id] ?? []);
   const domain = useSessionsStore((s) => s.domains[id] ?? null);
   const conclusion = useSessionsStore((s) => s.conclusions[id] ?? null);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
 
-  // Phase B-2 §5.7 — cast 를 그대로 사용. generated/custom 멤버도 정상 렌더.
-  const { status, thinkingPersona, error, actions } = useDebate(id);
+  const {
+    phase,
+    error,
+    chunks,
+    currentChunk,
+    revealedMessages,
+    isPaused,
+    speed,
+    progress,
+    actions,
+  } = useDebate(id);
   const [headerOpen, setHeaderOpen] = useState(false);
 
-  // 마운트 후 세션 없으면 → 홈
   useEffect(() => {
     if (mounted && !session) {
       toast.error('세션을 찾을 수 없습니다.');
@@ -57,7 +64,6 @@ export default function SessionRoomPage() {
     }
   }, [mounted, session, router]);
 
-  // 에러 토스트
   useEffect(() => {
     if (error) toast.error(`토론 진행 중 오류: ${error}`);
   }, [error]);
@@ -174,7 +180,7 @@ export default function SessionRoomPage() {
       )}
 
       {/* 에러 배너 */}
-      {error && status === 'error' && (
+      {error && phase === 'error' && (
         <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
           <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
           <div className="flex-1">
@@ -184,54 +190,41 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* 피드 — Phase B-2 §5.7: cast 직접 사용. generated/custom 도 정상 렌더. */}
+      {/* 피드 — revealedMessages 만 표시 (재생 진행 분) */}
       <DebateFeed
-        messages={messages}
+        messages={revealedMessages}
         cast={cast}
-        thinkingMember={thinkingPersona ?? null}
+        chunks={chunks}
         emptyHint={
-          status === 'idle'
-            ? '"토론 시작"을 누르면 페르소나들이 첫 발언을 시작합니다.'
-            : undefined
+          phase === 'idle'
+            ? '"토론 시작"을 누르면 첫 청크가 생성됩니다.'
+            : phase === 'generating'
+              ? '첫 청크를 만드는 중입니다.'
+              : undefined
         }
       />
 
-      {/* 사용자 개입 — 결론 완료/진행중에는 숨김 */}
-      {status !== 'concluded' && status !== 'concluding' && (
-        <UserInput
-          activePersonaIds={cast.map((m) => m.id)}
-          disabled={status === 'error'}
-          onSpeak={actions.injectUserMessage}
-          onInstruct={actions.injectInstruction}
-          onAddPersona={(archetypeId) => {
-            // B-1 — UserInput "페르소나 추가" 는 아키타입 id 를 넘긴다.
-            // CastMember 로 변환해 addCastMember 호출. (B-2 에서 UserInput 자체를 리팩토링)
-            const arch = PERSONA_MAP[archetypeId];
-            if (!arch) return;
-            actions.addCastMember({
-              id: archetypeId,
-              source: 'archetype',
-              archetypeId,
-              name: arch.name,
-              role: arch.role,
-              temperament: arch.temperament,
-              stance: '',
-              colorFrom: arch.colorFrom,
-              colorTo: arch.colorTo,
-              isFacilitator: archetypeId === 'facilitator',
-            });
-          }}
+      {/* 갈림길 패널 */}
+      {phase === 'steering' && currentChunk && (
+        <SteeringPanel
+          chunk={currentChunk}
+          onChoose={actions.chooseTopic}
+          onCustom={actions.submitCustomTopic}
+          onConclude={actions.conclude}
         />
       )}
 
-      {/* 컨트롤 */}
+      {/* 재생 트랜스포트 (하단 sticky) */}
       <DebateControls
-        status={status}
-        messageCount={messages.length}
+        phase={phase}
+        isPaused={isPaused}
+        speed={speed}
+        progress={progress}
         onStart={actions.start}
+        onPlay={actions.play}
         onPause={actions.pause}
-        onResume={actions.resume}
-        onConclude={actions.conclude}
+        onSetSpeed={actions.setSpeed}
+        onSkipTurn={actions.skipTurn}
       />
     </div>
   );

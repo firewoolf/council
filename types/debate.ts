@@ -45,6 +45,34 @@ export interface Message {
   createdAt: string; // ISO
   /** 페르소나 발언일 때, 사용자에게 질문이 포함되었는지 */
   isQuestion?: boolean;
+  /** 트랙 ⑤-1 — 이 발언이 속한 청크 id. 청크 이전 세션의 메시지는 undefined. */
+  chunkId?: string;
+  /** 트랙 ⑤-1 — 이 청크에서 가장 날카로운 1~2개 라인이면 true. */
+  isKeyPoint?: boolean;
+}
+
+/**
+ * 트랙 ⑤-1 — 세션에 저장하는 청크 메타데이터.
+ * 청크 한 단위가 다룬 소주제, 끝난 뒤 사용자에게 제시된 갈림길, 사용자의 선택.
+ * turn 본문은 그대로 messages 에 평면 저장되고, 여기엔 메타만 둔다.
+ */
+export interface ChunkMeta {
+  id: string;
+  sessionId: string;
+  /** 이 청크가 다룬 소주제 */
+  topic: string;
+  /** 재생 완료 후 제시된 다음 소주제 후보 */
+  nextTopics: NextTopicChoice[];
+  /** 사용자가 다음으로 고른 것 (직접 입력 포함). 마지막 청크면 undefined */
+  chosenNextLabel?: string;
+  createdAt: string; // ISO
+}
+
+export interface NextTopicChoice {
+  label: string;
+  hook: string;
+  /** 트랙 ⑤-1 부록 D — *못 본 각도* 후보면 true. nextTopics 배열에 정확히 1개. */
+  isBlindSpot: boolean;
 }
 
 export interface SessionPersona {

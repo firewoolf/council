@@ -27,6 +27,8 @@ import {
 } from '@/lib/prompts/recommender';
 import {
   buildConclusionPrompt,
+  buildChunkPrompt,
+  CHUNK_SYSTEM_PROMPT,
   conclusionSchema,
   type Conclusion,
 } from '@/lib/prompts/orchestrator';
@@ -130,47 +132,153 @@ const TEMPERATURE = {
 } as const;
 
 /**
- * 토론용 단일 발언 생성 schema.
- * generateObject 1회 호출에 발언자 + 내용 통합 (RPM 절약).
+ * 트랙 ⑤-1 — 청크 스키마 (부록 A 박제).
  *
- * max는 300 — 프롬프트는 "200자 이내"를 요구하지만, 약간 초과한 응답이
- * 스키마 검증에서 곧장 실패하지 않도록 헤드룸을 둔다.
+ * 한 호출 = 3~5턴 미니 장면 + 2~4개 nextTopics.
+ * isBlindSpot 의 "정확히 1개" 제약은 zod 로 강제할 수 없어
+ * sanitizeChunk 가 런타임에 보정한다.
  */
-export const speechSchema = z.object({
-  speakerName: z.string().describe('당신의 페르소나 이름. 정확히 그대로'),
-  replyToId: z
-    .string()
-    .nullable()
-    .describe('직전 다른 페르소나에게 반박할 때만 그 메시지 id. 없으면 null'),
+const chunkTurnSchema = z.object({
+  speakerName: z.string().describe('패널 명단의 이름과 정확히 일치'),
   message: z
     .string()
     .max(300)
     .describe('발언 본문 — 한국어 200자 이내. 원론·양비론 금지, 구체적인 한 방.'),
-  isQuestion: z.boolean().describe('사용자에게 직접 질문을 던졌으면 true'),
+  replyToIndex: z
+    .number()
+    .int()
+    .nullable()
+    .describe('이 청크 안에서 앞선 turn 인덱스(0부터)에 반박할 때만. 새 논점이면 null'),
+  isKeyPoint: z
+    .boolean()
+    .describe('이 청크에서 가장 날카로운 1~2개 라인이면 true, 아니면 false'),
 });
 
-export type SpeechObject = z.infer<typeof speechSchema>;
+const nextTopicSchema = z.object({
+  label: z
+    .string()
+    .describe(
+      '다음에 파고들 소주제 — 짧은 제목(15자 내외). ' +
+        '*못 본 각도* 후보는 label 맨 앞에 "✦ " 마커를 박제.',
+    ),
+  hook: z
+    .string()
+    .describe('왜 지금 이걸 파야 하는지 한 줄 — 방금 장면의 충돌을 가리키며'),
+  isBlindSpot: z
+    .boolean()
+    .describe(
+      '*못 본 각도* 후보면 true. nextTopics 배열에 정확히 1개만 true 여야 한다 — ' +
+        '패널 발언에서 함의되었지만 명시되지 않은 결론, 또는 사용자 고민이 깔고 있던 ' +
+        '전제 자체에 의문을 던지는 각도. 부록 D 끝 섹션 참조.',
+    ),
+});
+
+export const chunkSchema = z.object({
+  turns: z.array(chunkTurnSchema).min(3).max(5),
+  nextTopics: z.array(nextTopicSchema).min(2).max(4),
+});
+
+export type Chunk = z.infer<typeof chunkSchema>;
 
 /**
- * 페르소나 한 명의 다음 발언 생성.
+ * 트랙 ⑤-1 — LLM 응답 정규화.
+ *
+ * "nextTopics 에 isBlindSpot:true 정확히 1개" 제약은 zod 로 못 박는다 —
+ * 모델이 자연어로 따라줘야 하는 규칙. 어긋나면 여기서 보정한다.
+ *
+ * 보정 정책 (sanitizePanel 패턴 — 깨지 말고 살린다):
+ *   1) true 가 0개 → "✦ " 마커가 있는 후보 1개를 true 로 (없으면 마지막을 true).
+ *   2) true 가 2개 이상 → 첫 번째만 남기고 나머지를 false.
+ *   3) label 의 "✦ " 마커는 isBlindSpot 의 시각적 박제다. true 인데 마커 없으면
+ *      마커를 앞에 붙여준다. false 인데 마커 있으면 그대로 둔다 (모델 의도 존중).
  */
-export async function generateSpeech(args: {
+export function sanitizeChunk(raw: Chunk): { chunk: Chunk; notes: string[] } {
+  const notes: string[] = [];
+
+  // nextTopics 보정 — 깊은 복사 후 작업
+  const nextTopics = raw.nextTopics.map((t) => ({ ...t }));
+
+  const blindSpotIdx: number[] = [];
+  for (let i = 0; i < nextTopics.length; i++) {
+    const t = nextTopics[i];
+    if (t && t.isBlindSpot === true) blindSpotIdx.push(i);
+  }
+
+  if (blindSpotIdx.length === 0 && nextTopics.length > 0) {
+    const markerIdx = nextTopics.findIndex((t) => t.label.trimStart().startsWith('✦'));
+    const chosen = markerIdx >= 0 ? markerIdx : nextTopics.length - 1;
+    const target = nextTopics[chosen];
+    if (target) {
+      target.isBlindSpot = true;
+      notes.push(
+        `isBlindSpot 0개 → 인덱스 ${chosen} (${target.label}) 를 true 로 보정`,
+      );
+    }
+  } else if (blindSpotIdx.length > 1) {
+    const keep = blindSpotIdx[0]!;
+    for (const i of blindSpotIdx.slice(1)) {
+      const t = nextTopics[i];
+      if (t) t.isBlindSpot = false;
+    }
+    notes.push(
+      `isBlindSpot ${blindSpotIdx.length}개 → 인덱스 ${keep} 만 남기고 나머지 false 로 보정`,
+    );
+  }
+
+  // 마커 박제: true 인데 label 에 "✦ " 가 없으면 붙인다.
+  for (const t of nextTopics) {
+    if (t.isBlindSpot && !t.label.trimStart().startsWith('✦')) {
+      t.label = `✦ ${t.label.trimStart()}`;
+      notes.push(`isBlindSpot true 인 label 에 "✦ " 마커 박제`);
+    }
+  }
+
+  // turns 의 replyToIndex 무결성 — 자기 자신 이후를 가리키면 null 로.
+  const turns = raw.turns.map((t, i) => {
+    const r = t.replyToIndex;
+    if (r !== null && (r < 0 || r >= i)) {
+      notes.push(`turn ${i}.replyToIndex=${r} 무효 → null 로 보정`);
+      return { ...t, replyToIndex: null };
+    }
+    return { ...t };
+  });
+
+  return { chunk: { turns, nextTopics }, notes };
+}
+
+/**
+ * 트랙 ⑤-1 — 청크 생성 호출.
+ *
+ * generateObject 1회로 미니 장면 1개 (3~5턴) + 갈림길 (2~4개) 동시 생성.
+ * 발언 순서·반박 연결은 청크 프롬프트 안에서 모델이 연출한다.
+ */
+export async function generateChunk(args: {
   provider: AiProvider;
   apiKey: string;
-  system: string;
-  prompt: string;
-}): Promise<SpeechObject> {
+  concern: string;
+  panel: { name: string; role: string; stance: string }[];
+  topic: string;
+  transcript: string;
+  isFirst: boolean;
+}): Promise<Chunk> {
   try {
     const model = getModel(args.provider, args.apiKey);
     const { object } = await generateObject({
       model,
-      schema: speechSchema,
-      system: args.system,
-      prompt: args.prompt,
+      schema: chunkSchema,
+      system: CHUNK_SYSTEM_PROMPT,
+      prompt: buildChunkPrompt({
+        concern: args.concern,
+        panel: args.panel,
+        topic: args.topic,
+        transcript: args.transcript,
+        isFirst: args.isFirst,
+      }),
       temperature: TEMPERATURE.speech,
       maxRetries: 1,
     });
-    return object;
+    const { chunk } = sanitizeChunk(object);
+    return chunk;
   } catch (err) {
     throw classifyAiError(args.provider, err);
   }
