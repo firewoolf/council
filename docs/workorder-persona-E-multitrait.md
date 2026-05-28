@@ -212,7 +212,7 @@ expression='provocateur' 면 *추가 시각 마커* (orb 외곽 amber ring 또�
 
 ## 7. UI 변경 (`components/persona/PersonaCard.tsx`, `components/session/PersonaPicker.tsx`)
 
-### 7.1 PersonaCard 뱃지
+### 7.1 PersonaCard 뱃지 + 인터랙티브 변경
 
 기존 1개 temperament 뱃지 → 3개 칩 (작은 사이즈):
 
@@ -225,6 +225,64 @@ expression='provocateur' 면 *추가 시각 마커* (orb 외곽 amber ring 또�
 칩 색·라벨은 `LENS_COLORS` + 한국어 라벨 맵 (`STANCE_LABEL_KR`, `LENS_LABEL_KR`, `EXPRESSION_LABEL_KR`).
 
 `expression='measured'` 면 표현 칩 생략 (기본값이라 노이즈).
+
+#### 인터랙티브 변경 — 사용자 피드백(2026-05-26) 반영
+
+> "제일 처음 페르소나를 선택할때 페르소나의 타입(공감가, 독설가, 비판가 등) 라벨 버튼을 누르면 변경이 될 수 있도록 하자."
+
+각 칩이 **클릭 cycle** 로 동작 (picking 화면에서만 — picker 외 화면은 read-only):
+
+- **stance 칩 클릭** → `advocate → critic → agnostic → advocate` (3-cycle)
+- **lens 칩 클릭** → `analyst → empath → pragmatist → analyst` (3-cycle)
+- **expression 칩 클릭** → `measured → provocateur → measured` (2-cycle, toggle)
+
+상호작용 디테일:
+- 칩 클릭 시 카드 우상단 ⋯ 메뉴와 *동시 동작 가능* — `e.stopPropagation()` 필수.
+- 변경 즉시 `onTraitChange(memberId, axis, newValue)` 콜백 호출 → 부모(`PersonaPicker` → `session/new/page.tsx`)가 `cast` 갱신.
+- archetype 멤버의 trait 변경 시 *archetype 출신 표시* 는 유지하되 `LENS_COLORS[newLens]` 로 카드 시각 즉시 갱신 (색이 바뀐다 = 다른 사람이 된 거 같은 강한 시그널).
+- generated/custom 멤버도 동일하게 변경 가능.
+- 모바일에서 칩이 작아 누르기 어렵지 않게 — `min-height: 28px`, `min-width: 56px` 보장.
+
+**대안 UX — 드롭다운**: 칩 클릭 시 *3개 (또는 2개) 옵션 드롭다운* 등장. cycle 보다 명시적이지만 한 단계 더. **Sonnet 결정** — *처음 사용자 학습 비용* vs *반복 클릭 비용* 의 트레이드오프. 권장은 **cycle 우선**, 모바일에서 *길게 누름* 시 드롭다운 보조.
+
+#### `PersonaPicker` props 갱신
+
+```tsx
+interface PersonaPickerProps {
+  cast: CastMember[];
+  // ...기존...
+  /** trait 축별 cycle 변경. Picker 내부에서만 호출됨. */
+  onTraitChange: (memberId: string, axis: 'stanceAxis' | 'lens' | 'expression', newValue: string) => void;
+}
+```
+
+`session/new/page.tsx` 의 `handleTraitChange` 핸들러 신규:
+
+```tsx
+const handleTraitChange = useCallback(
+  (memberId: string, axis: keyof Trait, newValue: string) => {
+    setCast((prev) =>
+      prev.map((m) => {
+        if (m.id !== memberId) return m;
+        const trait = { ...m.trait, [axis]: newValue };
+        // lens 변경 시 LENS_COLORS 재적용
+        const colors = axis === 'lens'
+          ? LENS_COLORS[newValue as Lens]
+          : { from: m.colorFrom, to: m.colorTo };
+        return {
+          ...m,
+          trait,
+          colorFrom: colors.from,
+          colorTo: colors.to,
+        };
+      }),
+    );
+  },
+  [],
+);
+```
+
+stance/expression 변경 시 색은 그대로 (lens 만 색의 주체). UI 즉시 반영.
 
 ### 7.2 커스텀 폼 (Phase B-2 §5.6 변형)
 

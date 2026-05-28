@@ -7,22 +7,42 @@
 
 ## Active
 
-### 트랙 ⑤-1 청크 엔진 — 다음 진입 1순위
-Phase B 완주로 진입 가능 상태. 워크오더 `docs/workorder-debate-5-1-chunk-engine.md` 본체 존재.
-Gold standard 예시(LLM 한 호출이 재현해야 할 청크 산출물): `docs/example-target-discussion.md` (Opus, 2026-05-26).
-구현 시 워크오더 본문 §3 chunkSchema 와 §4 buildChunkPrompt 가 example 의 표 §5 제약 6개를 강제해야 함.
-**핵심 새 제약 (어제 토론 결과):** `nextTopics` 의 ✦ 못 본 각도 1개 의무 (워크오더 부록 D 새 섹션).
+### 트랙 ⑤-1 청크 엔진 — Sonnet 출하 (검수 통과)
+워크오더 `docs/workorder-debate-5-1-chunk-engine.md` 본체.
+Gold standard reference: `docs/example-target-discussion.md` (Opus, 2026-05-26).
+**현재 커서 (2026-05-26):** Sonnet 구현 완료, Opus 검수 통과(부록 A~D 본문·sanitizeChunk·phase 머신 모두 정확). 호스트 commit·push·라이브 검증 대기 중.
+**라이브 검증 후 후속 작업 박제됨 → 아래 ⑤-1 후속 참조.**
 
-### 트랙 ① Phase E — 페르소나 모델 v2 (다축 trait) — 트랙 ⑤-1 이후
+### 트랙 ⑤-1 후속 — 속도 + 대기 시간 UX
+워크오더 `docs/workorder-debate-5-1-followup-speed-waiting.md` (Opus, 2026-05-26).
+**진단:** 청크 생성이 체감 너무 길고, 대기 시간이 죽은 시간이 됨 (사용자 피드백 2026-05-26).
+**해결:** (A) 속도 — Groq 'chunk' role 활성(검증 후) + transcript 압축 + maxTokens + (옵션) turn 수 압축. (B) 대기 UX — `generating` phase 동안 사용자 메모 영역, *시그널* / *발언으로 격상* 토글.
+출하 단위 2개: ⑤-1f-A 속도 / ⑤-1f-B 대기 UX.
+
+### 트랙 ⑤-2 시인성·화자 식별 + 스테이지 UI + 페르소나 필터 + 백그라운드
+워크오더 `docs/workorder-debate-5-2-stage-ui.md` (Opus, 2026-05-26).
+**진단:** 채팅 메타포 위에 *회의실 메타포* 가 필요 (사용자 피드백 2026-05-26 — 페르소나 구분 헷갈림, 몰입감 부족, 페르소나별 발언 모아 보기).
+**범위:** PersonaStageStrip 신규 (상단 sticky orb 줄), PersonaOrb state(idle/speaking/thinking) 강화, MessageCard 페르소나별 색·테두리·card-enter 모션, PersonaDetailDrawer 신규 (페르소나별 발언 필터 — 모바일 bottom sheet / 데스크탑 사이드), 회의실 백그라운드(라운드 테이블 그라디언트).
+**범위 확장:** 트랙 ③ Phase 1 (살아있는 스테이지 UI) 흡수.
+출하 단위 2개: ⑤-2a 스테이지+시인성 / ⑤-2b 필터+백그라운드.
+
+### 트랙 ① Phase E — 페르소나 모델 v2 (다축 trait) — 트랙 ⑤-2 이후
 워크오더 `docs/workorder-persona-E-multitrait.md` (Opus, 2026-05-26).
 **진단:** 현재 `Temperament` enum 5종이 stance·lens·expression 3축이 섞인 비-MECE 모델.
 잡스 같은 *옹호적·분석적·도발적* 조합 표현 불가.
 **해결:** `Trait = { stanceAxis, lens, expression }` 3축 객체로 분리.
-**권장 순서:** 트랙 ⑤-1 청크 엔진 출하 *후* 진입 (모델 변경이 청크 프롬프트와 충돌 방지).
-출하 단위 2개: E-1 데이터 모델 + 마이그레이션 / E-2 추천기 + UI.
+**갱신 (2026-05-26):** §7.1 PersonaCard 뱃지를 *클릭 cycle* 로 박제 — 사용자 피드백 반영.
+출하 단위 2개: E-1 데이터 모델 + 마이그레이션 / E-2 추천기 + UI (인터랙티브 칩 포함).
 
 ### 트랙① Phase B-3 (선택) — Supabase `session_cast` 마이그레이션
 미연결이라 블로킹 아님. 워크오더 §6.
+
+---
+
+## 후순위 (사용자 피드백 2026-05-26 후순위 동의)
+
+### ✦ 못 본 각도 의미 강화
+현재 `sanitizeChunk` 가 *형식* 만 강제. *의미* 가 진짜 못 본 각도인지 LLM 한계. 데이터 모인 후 부록 D 프롬프트 강화 또는 별도 추출 호출 1회 추가 등 검토.
 
 ---
 
