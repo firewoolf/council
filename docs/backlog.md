@@ -13,6 +13,11 @@
 CP3 워크오더 부록(§5.6): `docs/workorder-persona-B-cast-cp3.md` (Opus, 2026-05-26).
 CP4 워크오더 부록(§5.7~§5.8): `docs/workorder-persona-B-cast-cp4.md` (Opus, 2026-05-26).
 
+### 트랙 ⑤-1 청크 엔진 — Gold Standard 박제
+Phase B 완주 직후 진입 예정. 워크오더 `docs/workorder-debate-5-1-chunk-engine.md` 본체 존재.
+Gold standard 예시(LLM 한 호출이 재현해야 할 청크 산출물): `docs/example-target-discussion.md` (Opus, 2026-05-26).
+구현 시 워크오더 본문 §3 chunkSchema 와 §4 buildChunkPrompt 가 example 의 표 §5 제약 6개를 강제해야 함.
+
 **현재 커서 (2026-05-24):**
 - ✅ §5.1 검증 슬라이스 출하 — `panelDesignSchema`(느슨한 스키마: enum·min 제거),
   `buildPanelDesignPrompt`, `designPanel`(client), `sanitizePanel`(정규화·강등·보충·dedupe),

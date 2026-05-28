@@ -30,6 +30,7 @@
 3. **마이그레이션 무중단** — `Message`에 붙는 `isKeyPoint`·`chunkId`, 신규 `sessionChunks`는 전부 **가산적 필드**. 기존 LocalStorage 세션(청크 없는 평면 기록)을 깨면 안 된다. zustand persist version을 올리지 말 것. 셀렉터는 항상 `?? []` / `?? {}` 가드.
 4. **착수 첫 단계는 검증** — §3 이전에, 무료 모델이 중첩 배열 구조화 출력(`turns` + `nextTopics`)을 안정적으로 채우는지 Groq·Gemini로 먼저 확인한다(§5-0). 불안정하면 청크 생성은 Gemini 고정.
 5. `nextTopics`·`buildChunkPrompt`·`CHUNK_SYSTEM_PROMPT` 프롬프트 본문은 **부록 B·C·D에 그대로 첨부돼 있다.** 임의로 다시 쓰지 말 것 — 이 프롬프트 품질이 제품의 성패다.
+6. **Gold standard 산출물 reference** — `docs/example-target-discussion.md` 가 *한 호출이 만들어야 할 청크 품질·구조*의 박제된 예시다. 청크 한 단위의 턴 구성·충돌 시그널·사회자 능동 진행·nextTopics 못 본 각도·합의/갈림/질문 분리 — 6개 제약을 §5 표로 정리. 검증(§5-2) 시 이 표와 1:1 대조한다.
 
 ---
 
@@ -202,6 +203,7 @@ idle ─(start)─▶ generating ─(청크 도착)─▶ playing
 - [ ] 청크 내 발언들이 *서로* 반박함(`replyToIndex` 연결이 실제 내용과 맞음).
 - [ ] 재생 속도가 읽을 만함(이전 "너무 빠르다" 문제 해소). 일시정지·속도·탭 동작.
 - [ ] 재생 종료 후 갈림길 카드가 뜨고, **`nextTopics` 후보가 막연하지 않음** — 방금 장면에서 갈린 지점을 가리킴(부록 D의 나쁜 예 같은 교과서 목차가 아님). ★최우선 검수 항목.
+- [ ] **✦ 못 본 각도가 후보에 정확히 1개 떴는가** — 패널 발언에서 함의되었지만 명시되지 않은 결론. label 앞에 "✦ " 마커. ★최우선 검수 항목 (부록 D 새 제약).
 - [ ] 소주제 선택 → 다음 청크가 그 주제로 이어짐. "직접 입력"·"결론 내기"도 동작.
 - [ ] 굴복·벙벙함 없음 — 패널이 사용자에게 듣기 좋은 말을 하지 않음.
 
@@ -253,17 +255,28 @@ const chunkTurnSchema = z.object({
     .describe('이 청크에서 가장 날카로운 1~2개 라인이면 true, 아니면 false'),
 });
 
+const nextTopicSchema = z.object({
+  label: z
+    .string()
+    .describe(
+      '다음에 파고들 소주제 — 짧은 제목(15자 내외). ' +
+        '*못 본 각도* 후보는 label 맨 앞에 "✦ " 마커를 박제.',
+    ),
+  hook: z
+    .string()
+    .describe('왜 지금 이걸 파야 하는지 한 줄 — 방금 장면의 충돌을 가리키며'),
+  isBlindSpot: z
+    .boolean()
+    .describe(
+      '*못 본 각도* 후보면 true. nextTopics 배열에 정확히 1개만 true 여야 한다 — ' +
+        '패널 발언에서 함의되었지만 명시되지 않은 결론, 또는 사용자 고민이 깔고 있던 ' +
+        '전제 자체에 의문을 던지는 각도. 부록 D 끝 섹션 참조.',
+    ),
+});
+
 export const chunkSchema = z.object({
   turns: z.array(chunkTurnSchema).min(3).max(5),
-  nextTopics: z
-    .array(
-      z.object({
-        label: z.string().describe('다음에 파고들 소주제 — 짧은 제목(15자 내외)'),
-        hook: z.string().describe('왜 지금 이걸 파야 하는지 한 줄 — 방금 장면의 충돌을 가리키며'),
-      }),
-    )
-    .min(2)
-    .max(4),
+  nextTopics: z.array(nextTopicSchema).min(2).max(4),
 });
 
 export type Chunk = z.infer<typeof chunkSchema>;
@@ -371,4 +384,18 @@ speakerName 은 제공된 패널 명단의 이름과 정확히 일치해야 한�
 - "수익성 분석"          ← 막연함
 - "사용자 피드백 수렴"    ← 교과서 목차
 - "장단점 비교"          ← 아무것도 안 가리킴
+
+[✦ 못 본 각도 — 반드시 1개]
+nextTopics 가 4개 일 때 그중 1개는 반드시 *사용자가 생각도 못 했을 트레이드오프* 다.
+3개 이하일 때도 1개는 이 자리에 두려고 노력한다 (불가능하면 생략 가능).
+
+"못 본 각도" 의 정의:
+- 패널 발언에서 *함의되었지만 명시되지 않은* 결론.
+- 두 사람의 주장을 합치면 자연스럽게 도출되는데 본인들은 아직 꺼내지 않은 결론.
+- 사용자의 원 고민이 *전제로 깔고 있던 가정* 자체에 의문을 던지는 각도.
+
+이 항목은 출력의 다른 후보와 시각적으로 차별화될 수 있도록 label 앞에 마커 "✦ "
+를 박제한다. 예시: "✦ 가격 책정이 아니라 가격 *철회* 가 진짜 문제 아닌가".
+
+0개면 청크가 ChatGPT 다. 2개 이상이면 사용자가 길을 잃는다. **정확히 1개.**
 ```
