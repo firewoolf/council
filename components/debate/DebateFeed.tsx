@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 import { MessageCard } from './MessageCard';
 import { TypingIndicator } from './TypingIndicator';
+import { cn } from '@/lib/utils';
 import type { Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
@@ -20,10 +22,19 @@ interface DebateFeedProps {
   emptyHint?: string;
 }
 
+/** 바닥 근처로 판정할 스크롤 임계값(px). */
+const NEAR_BOTTOM_PX = 240;
+
 /**
  * 토론 피드.
- * 메시지 + (있으면) 생각중 인디케이터.
- * 새 메시지가 추가될 때 가장 아래로 자동 스크롤.
+ *
+ * 스크롤 정책 (2026-05-26 — 자동 스크롤 자율화):
+ *   - 사용자가 *바닥 근처* 에 있을 때만 새 메시지 도착 시 자동으로 따라간다.
+ *   - 사용자가 위로 올려 읽고 있으면 강제 점프 금지. 대신 "↓ N개 새 발언" 배지로 알림.
+ *   - 배지 클릭 → 바닥으로 부드럽게 점프. 사용자가 직접 바닥에 가까이 가도 자동 해제.
+ *
+ * 윈도우 스크롤 기준. DebateFeed 가 자체 스크롤 컨테이너가 아니라
+ * 페이지 흐름의 일부이기 때문에 document.scrollingElement / window.scrollY 로 측정.
  */
 export function DebateFeed({
   messages,
@@ -32,11 +43,59 @@ export function DebateFeed({
   emptyHint,
 }: DebateFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // 자동 스크롤 — 메시지 수 또는 생각 중 페르소나 변경 시
+  const measureNearBottom = useCallback(() => {
+    if (typeof window === 'undefined') return true;
+    const doc = document.scrollingElement ?? document.documentElement;
+    const distanceFromBottom =
+      doc.scrollHeight - (window.scrollY + window.innerHeight);
+    return distanceFromBottom < NEAR_BOTTOM_PX;
+  }, []);
+
+  // 스크롤 위치 추적 — passive 리스너로 비용 거의 0
   useEffect(() => {
+    function onScroll() {
+      const atBottom = measureNearBottom();
+      setIsNearBottom(atBottom);
+      if (atBottom) setUnreadCount(0);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    // 초기값 보정
+    setIsNearBottom(measureNearBottom());
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [measureNearBottom]);
+
+  // 새 메시지 / 생각 중 멤버 변화에 반응
+  // 사용자가 바닥 근처면 자동 따라가고, 아니면 unread 누적.
+  const prevMessageCount = useRef(messages.length);
+  useEffect(() => {
+    const delta = messages.length - prevMessageCount.current;
+    prevMessageCount.current = messages.length;
+    if (delta <= 0) return;
+
+    if (isNearBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    } else {
+      setUnreadCount((c) => c + delta);
+    }
+  }, [messages.length, isNearBottom]);
+
+  // 생각 중 멤버는 토론 흐름의 신호 — 바닥 근처면 같이 따라감, 아니면 무시.
+  // 의존성에 thinkingMember 객체 전체가 아닌 id 만 — 다른 필드 변경엔 반응 안 함.
+  const thinkingId = thinkingMember?.id ?? null;
+  useEffect(() => {
+    if (!thinkingId) return;
+    if (isNearBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [thinkingId, isNearBottom]);
+
+  const jumpToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, thinkingMember?.id]);
+    setUnreadCount(0);
+  }, []);
 
   /** id → 메시지 매핑 (반박 대상 lookup 용) */
   const messageById = useMemo(() => {
@@ -59,6 +118,8 @@ export function DebateFeed({
       </div>
     );
   }
+
+  const showUnreadBadge = !isNearBottom && unreadCount > 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -96,6 +157,27 @@ export function DebateFeed({
       {thinkingMember && <TypingIndicator persona={thinkingMember} />}
 
       <div ref={bottomRef} />
+
+      {/*
+        새 발언 알림 배지 — 사용자가 위로 올려놓고 읽는 동안 새 발언이 쌓이면 표시.
+        DebateControls(하단 sticky)와 겹치지 않도록 bottom 여백 유지.
+        클릭 시 부드럽게 바닥으로 점프.
+      */}
+      {showUnreadBadge && (
+        <button
+          type="button"
+          onClick={jumpToBottom}
+          className={cn(
+            'fixed bottom-28 right-4 z-20 flex items-center gap-1.5 rounded-full',
+            'bg-primary px-3 py-2 text-xs font-semibold text-white shadow-lg',
+            'transition-transform hover:scale-105 animate-fade-in sm:right-6',
+          )}
+          aria-label={`아래 ${unreadCount}개 새 발언으로 이동`}
+        >
+          <ChevronDown className="size-3.5" />
+          {unreadCount}개 새 발언
+        </button>
+      )}
     </div>
   );
 }
