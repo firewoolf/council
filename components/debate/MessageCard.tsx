@@ -1,6 +1,7 @@
 import { CornerDownRight, HelpCircle, Megaphone, User } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
+import { TEMPERAMENT_LABEL_KR } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -62,18 +63,22 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
     return null;
   }
 
+  // 트랙 ⑤-2a — 좌측 색띠 두께: 기본 6px, isKeyPoint 8px
+  const borderLeftWidth = message.isKeyPoint ? 8 : 6;
+
   return (
     <div
       className={cn(
-        'relative flex flex-col gap-2 rounded-xl border bg-surface p-4 animate-fade-in',
-        // 트랙 ⑤-1 — isKeyPoint 최소 강조 (정교한 시인성은 ⑤-2)
+        'relative flex flex-col gap-2 rounded-xl border p-4 animate-card-enter',
         message.isKeyPoint
-          ? 'border-accent/50 bg-accent/[0.04]'
+          ? 'border-accent/50'
           : 'border-border',
       )}
       style={{
-        borderLeftWidth: 4,
+        borderLeftWidth,
         borderLeftColor: speaker.colorTo,
+        // 트랙 ⑤-2a — 페르소나 색 alpha 1.5% 배경 그라디언트
+        background: `linear-gradient(135deg, ${speaker.colorFrom}05, transparent 40%), hsl(var(--surface))`,
       }}
     >
       {/* 반박 연결선 */}
@@ -92,6 +97,16 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
       <div className="flex items-center gap-2">
         <PersonaOrb persona={speaker} size={28} glow="soft" />
         <span className="text-sm font-semibold text-text">{speaker.name}</span>
+        {/* 트랙 ⑤-2a — temperament 미니 칩 */}
+        <span
+          className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none"
+          style={{
+            color: speaker.colorTo,
+            background: `${speaker.colorTo}22`,
+          }}
+        >
+          {TEMPERAMENT_LABEL_KR[speaker.temperament]}
+        </span>
         {message.isQuestion && (
           <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">
             <HelpCircle className="size-3" />

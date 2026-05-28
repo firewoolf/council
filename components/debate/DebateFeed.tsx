@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { MessageCard } from './MessageCard';
+import { PersonaStageStrip } from './PersonaStageStrip';
 import { cn } from '@/lib/utils';
 import type { ChunkMeta, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -20,6 +21,12 @@ interface DebateFeedProps {
   chunks: readonly ChunkMeta[];
   /** 회의 시작 전 안내 — 발언이 아직 없을 때 표시 */
   emptyHint?: string;
+  /** 트랙 ⑤-2a — 지금 발화 중인 멤버 id. PersonaStageStrip 에 전달. */
+  activeSpeakerId?: string | null;
+  /** 트랙 ⑤-2a — 청크 생성 중 "준비 중" 멤버 id. PersonaStageStrip 에 전달. */
+  thinkingMemberId?: string | null;
+  /** 트랙 ⑤-2a — orb 클릭 → PersonaDetailDrawer 열기 (⑤-2b 본체). */
+  onSelectMember?: (memberId: string) => void;
 }
 
 /** 바닥 근처로 판정할 스크롤 임계값(px). */
@@ -45,6 +52,9 @@ export function DebateFeed({
   cast,
   chunks,
   emptyHint,
+  activeSpeakerId = null,
+  thinkingMemberId = null,
+  onSelectMember,
 }: DebateFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -147,18 +157,32 @@ export function DebateFeed({
     return out;
   }, [messages, chunks]);
 
+  const showUnreadBadge = !isNearBottom && unreadCount > 0;
+
+  /** 공통 StageStrip — 항상 피드 상단에 박제. */
+  const stageStrip = (
+    <PersonaStageStrip
+      cast={cast}
+      activeSpeakerId={activeSpeakerId}
+      thinkingMemberId={thinkingMemberId}
+      onSelect={onSelectMember ?? (() => {})}
+    />
+  );
+
   if (messages.length === 0 && emptyHint) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-surface/40 p-8 text-center">
-        <p className="text-sm leading-relaxed text-text-muted">{emptyHint}</p>
+      <div className="flex flex-col gap-4">
+        {stageStrip}
+        <div className="rounded-xl border border-dashed border-border bg-surface/40 p-8 text-center">
+          <p className="text-sm leading-relaxed text-text-muted">{emptyHint}</p>
+        </div>
       </div>
     );
   }
 
-  const showUnreadBadge = !isNearBottom && unreadCount > 0;
-
   return (
     <div className="flex flex-col gap-6">
+      {stageStrip}
       {groups.map((g, idx) => (
         <section key={g.key} className="flex flex-col gap-3">
           {/* 청크 헤더 — 두 번째 그룹부터 표시 (첫 청크/플랫 그룹은 헤더 없이) */}

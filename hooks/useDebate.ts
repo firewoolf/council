@@ -59,6 +59,17 @@ interface UseDebateReturn {
   speed: PlaybackSpeed;
   /** 현재 청크의 재생 진행 — revealed / total turn 수 */
   progress: { revealed: number; total: number };
+  /**
+   * 트랙 ⑤-2a — 스테이지 UI.
+   * playing 중 가장 최근 reveal 된 turn 의 speakerId.
+   * 그 외 phase 에서는 null.
+   */
+  activeSpeakerId: string | null;
+  /**
+   * 트랙 ⑤-2a — generating 중 "준비 중" 인디케이터.
+   * 사회자(isFacilitator) 우선, 없으면 캐스트 첫 멤버. generating 외 null.
+   */
+  thinkingMemberId: string | null;
   actions: {
     /** 첫 청크 생성 시작 */
     start: () => void;
@@ -534,6 +545,21 @@ export function useDebate(sessionId: string): UseDebateReturn {
     setPhase('concluding');
   }, []);
 
+  // ───────────────────────────── ⑤-2a 스테이지 파생 값
+  /** playing 중 가장 최근 reveal 된 turn 의 speakerId. */
+  const activeSpeakerId = useMemo<string | null>(() => {
+    if (phase !== 'playing' || revealedTurnCount === 0) return null;
+    const lastTurn = currentChunkTurns[revealedTurnCount - 1];
+    return lastTurn?.speakerId ?? null;
+  }, [phase, revealedTurnCount, currentChunkTurns]);
+
+  /** generating 중 "준비 중" 인디케이터 — 사회자 우선, 없으면 첫 멤버. */
+  const thinkingMemberId = useMemo<string | null>(() => {
+    if (phase !== 'generating') return null;
+    const facilitator = cast.find((c) => c.isFacilitator);
+    return facilitator?.id ?? cast[0]?.id ?? null;
+  }, [phase, cast]);
+
   return {
     phase,
     error,
@@ -544,6 +570,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
     revealedMessages,
     isPaused,
     speed,
+    activeSpeakerId,
+    thinkingMemberId,
     progress: {
       revealed: Math.min(revealedTurnCount, currentChunkTurns.length),
       total: currentChunkTurns.length,

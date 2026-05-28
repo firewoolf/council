@@ -81,3 +81,34 @@
     text-wrap: balance;
   }
 }
+
+/* ============================================================
+   트랙 ⑤-2a — 스테이지 UI CSS 변수 + 키프레임
+   ============================================================ */
+
+:root {
+  /* orb-pulse 맥동 강도 — box-shadow blur + color */
+  --pulse-soft:   18px hsl(var(--accent) / 0.4);
+  --pulse-strong: 32px hsl(var(--accent) / 0.75);
+
+  /* 회의실 배경 오버레이 (⑤-2b 에서 확장) */
+  --stage-bg: radial-gradient(circle at 50% -20%, color-mix(in srgb, hsl(var(--surface)) 50%, transparent), transparent 70%);
+}
+
+/* 화자 맥동 — speaking 상태 */
+@keyframes orb-pulse {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 var(--pulse-soft); }
+  50%      { transform: scale(1.08); box-shadow: 0 0 var(--pulse-strong); }
+}
+
+/* 준비 중 부유 — thinking 상태 */
+@keyframes orb-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+/* 카드 진입 — 좌측에서 슬라이드 인 */
+@keyframes card-enter {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

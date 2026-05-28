@@ -53,9 +53,13 @@ export default function SessionRoomPage() {
     isPaused,
     speed,
     progress,
+    activeSpeakerId,
+    thinkingMemberId,
     actions,
   } = useDebate(id);
   const [headerOpen, setHeaderOpen] = useState(false);
+  // 트랙 ⑤-2a — PersonaDetailDrawer 열림 대상 (⑤-2b 에서 Drawer 본체 구현)
+  const [, setSelectedMemberId] = useState<string | null>(null);
 
   useEffect(() => {
     if (mounted && !session) {
@@ -195,6 +199,9 @@ export default function SessionRoomPage() {
         messages={revealedMessages}
         cast={cast}
         chunks={chunks}
+        activeSpeakerId={activeSpeakerId}
+        thinkingMemberId={thinkingMemberId}
+        onSelectMember={setSelectedMemberId}
         emptyHint={
           phase === 'idle'
             ? '"토론 시작"을 누르면 첫 청크가 생성됩니다.'

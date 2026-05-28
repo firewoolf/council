@@ -54,6 +54,10 @@ const config: Config = {
       animation: {
         'pulse-glow': 'pulse-glow 2.4s ease-in-out infinite',
         'fade-in': 'fade-in 0.3s ease-out',
+        // 트랙 ⑤-2a — keyframes 는 globals.css 에 정의 (CSS 변수 호환)
+        'orb-pulse':  'orb-pulse 1.5s ease-in-out infinite',
+        'orb-bob':    'orb-bob 0.6s ease-in-out infinite',
+        'card-enter': 'card-enter 0.4s ease-out',
       },
     },
   },
