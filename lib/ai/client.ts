@@ -276,6 +276,9 @@ export async function generateChunk(args: {
       }),
       temperature: TEMPERATURE.speech,
       maxRetries: 1,
+      // ⑤-1f-A 속도 개선: 청크 한 단위는 ~3턴×200자 + nextTopics 4×100자 ≈ 1000 토큰.
+      // 모델이 *불필요하게 길게* 생성하는 시간을 차단. 안전 마진 포함 1500.
+      maxTokens: 1500,
     });
     const { chunk } = sanitizeChunk(object);
     return chunk;

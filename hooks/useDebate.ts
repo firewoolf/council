@@ -92,6 +92,11 @@ function generateId(): string {
 /**
  * 최근 N 메시지의 화자별 한 줄 압축.
  * "LLM 요약 호출 금지" — 토큰 절약이 청크의 목적이라 단순 조립만.
+ *
+ * ⑤-1f-A 속도 개선 (2026-05-26):
+ *   - 기본 maxTurns 12 → 8 로 축소 (호출부에서 전달).
+ *   - isKeyPoint:true 메시지는 *N 무관* 항상 포함 (앞쪽 토론의 결정적 라인 보존).
+ *   - keyPoint 는 시간순 앞부분에 ★ 마커로 표시. 최근 tail 과 중복되면 tail 우선.
  */
 function buildTranscript(
   messages: readonly Message[],
@@ -100,13 +105,21 @@ function buildTranscript(
 ): string {
   const map = new Map(cast.map((c) => [c.id, c]));
   const tail = messages.slice(-maxTurns);
-  return tail
-    .map((m) => {
-      if (m.speakerId === null) return `[사용자] ${m.content}`;
-      const name = map.get(m.speakerId)?.name ?? '???';
-      return `[${name}] ${m.content}`;
-    })
-    .join('\n');
+  const tailIds = new Set(tail.map((m) => m.id));
+
+  // 최근 N 밖의 isKeyPoint 들을 시간순 앞에 추가. 안전 상한 3개.
+  const keyPointsBefore = messages
+    .filter((m) => m.isKeyPoint && !tailIds.has(m.id))
+    .slice(-3);
+
+  const formatLine = (m: Message): string => {
+    if (m.speakerId === null) return `[사용자] ${m.content}`;
+    const name = map.get(m.speakerId)?.name ?? '???';
+    const marker = m.isKeyPoint ? '★ ' : '';
+    return `${marker}[${name}] ${m.content}`;
+  };
+
+  return [...keyPointsBefore, ...tail].map(formatLine).join('\n');
 }
 
 export function useDebate(sessionId: string): UseDebateReturn {
@@ -204,7 +217,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
       try {
         const transcript = pending.isFirst
           ? ''
-          : buildTranscript(safeMessages, cast, 12);
+          : buildTranscript(safeMessages, cast, 8);
 
         const panel = cast.map((c) => ({
           name: c.name,
