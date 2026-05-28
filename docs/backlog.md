@@ -18,6 +18,14 @@ Phase B 완주 직후 진입 예정. 워크오더 `docs/workorder-debate-5-1-chu
 Gold standard 예시(LLM 한 호출이 재현해야 할 청크 산출물): `docs/example-target-discussion.md` (Opus, 2026-05-26).
 구현 시 워크오더 본문 §3 chunkSchema 와 §4 buildChunkPrompt 가 example 의 표 §5 제약 6개를 강제해야 함.
 
+### 트랙 ① Phase E — 페르소나 모델 v2 (다축 trait)
+워크오더 `docs/workorder-persona-E-multitrait.md` (Opus, 2026-05-26).
+**진단:** 현재 `Temperament` enum 5종이 stance·lens·expression 3축이 섞인 비-MECE 모델.
+잡스 같은 *옹호적·분석적·도발적* 조합 표현 불가.
+**해결:** `Trait = { stanceAxis, lens, expression }` 3축 객체로 분리.
+**권장 순서:** 트랙 ⑤-1 청크 엔진 출하 *후* 진입 (모델 변경이 청크 프롬프트와 충돌 방지).
+출하 단위 2개: E-1 데이터 모델 + 마이그레이션 / E-2 추천기 + UI.
+
 **현재 커서 (2026-05-24):**
 - ✅ §5.1 검증 슬라이스 출하 — `panelDesignSchema`(느슨한 스키마: enum·min 제거),
   `buildPanelDesignPrompt`, `designPanel`(client), `sanitizePanel`(정규화·강등·보충·dedupe),
