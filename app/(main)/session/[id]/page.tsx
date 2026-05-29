@@ -16,6 +16,7 @@ import {
 import { DebateControls } from '@/components/debate/DebateControls';
 import { DebateFeed } from '@/components/debate/DebateFeed';
 import { SteeringPanel } from '@/components/debate/SteeringPanel';
+import { WaitingMemoArea } from '@/components/debate/WaitingMemoArea';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { useDebate } from '@/hooks/useDebate';
@@ -210,6 +211,11 @@ export default function SessionRoomPage() {
               : undefined
         }
       />
+
+      {/* ⑤-1f-B 대기 시간 메모 — generating 중에만 노출 */}
+      {phase === 'generating' && (
+        <WaitingMemoArea onSubmit={actions.submitWaitingMemo} />
+      )}
 
       {/* 갈림길 패널 */}
       {phase === 'steering' && currentChunk && (

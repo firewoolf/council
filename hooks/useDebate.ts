@@ -86,6 +86,12 @@ interface UseDebateReturn {
     submitCustomTopic: (text: string) => void;
     /** 갈림길에서 "결론 내기" */
     conclude: () => void;
+    /**
+     * ⑤-1f-B — generating 중 사용자 메모.
+     *   asUtterance=false → 다음 청크 transcript 끝에 시그널로 1회 주입 (발언 아님)
+     *   asUtterance=true  → 즉시 사용자 발언 메시지로 추가
+     */
+    submitWaitingMemo: (text: string, opts: { asUtterance: boolean }) => void;
   };
 }
 
@@ -211,6 +217,10 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const pendingTopicRef = useRef<{ topic: string; isFirst: boolean } | null>(null);
   const generateInFlightRef = useRef(false);
 
+  // ⑤-1f-B 대기 UX — generating 중 사용자가 적어둔 *시그널 메모*.
+  // 발언이 아니라 다음 청크의 transcript 끝에 "[사용자 메모]" 로 한 번 주입되고 비워짐.
+  const pendingMemoRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (phase !== 'generating') return;
     if (!session || !hasAnyKey) return;
@@ -226,9 +236,16 @@ export function useDebate(sessionId: string): UseDebateReturn {
     const handle = setTimeout(async () => {
       if (cancelled) return;
       try {
-        const transcript = pending.isFirst
+        const baseTranscript = pending.isFirst
           ? ''
           : buildTranscript(safeMessages, cast, 8);
+
+        // ⑤-1f-B — 대기 메모가 있으면 transcript 끝에 시그널로 주입 (한 번만).
+        const memo = pendingMemoRef.current;
+        pendingMemoRef.current = null;
+        const transcript = memo
+          ? `${baseTranscript}\n[사용자 메모 — 패널에게 주는 시그널 (발언 아님, 방향만 참고)]\n${memo}`
+          : baseTranscript;
 
         const panel = cast.map((c) => ({
           name: c.name,
@@ -545,6 +562,35 @@ export function useDebate(sessionId: string): UseDebateReturn {
     setPhase('concluding');
   }, []);
 
+  /**
+   * ⑤-1f-B — generating 중 사용자가 적은 메모.
+   *
+   * - asUtterance: false → pendingMemoRef 에 보관. 다음 청크 생성 시
+   *   transcript 끝에 "[사용자 메모]" 로 한 번 주입되고 비워진다. 발언 아님.
+   * - asUtterance: true → 즉시 *사용자 발언* 으로 추가. 평소 발언과 동일하게
+   *   히스토리에 쌓이고, transcript 가 자연스럽게 포함하게 된다.
+   */
+  const submitWaitingMemo = useCallback(
+    (text: string, opts: { asUtterance: boolean }) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      if (opts.asUtterance) {
+        appendMessage(sessionId, {
+          id: generateId(),
+          sessionId,
+          speakerId: null,
+          content: trimmed,
+          createdAt: new Date().toISOString(),
+        });
+        // 발언이 본문에 들어갔으므로 시그널 메모는 비움.
+        pendingMemoRef.current = null;
+      } else {
+        pendingMemoRef.current = trimmed;
+      }
+    },
+    [appendMessage, sessionId],
+  );
+
   // ───────────────────────────── ⑤-2a 스테이지 파생 값
   /** playing 중 가장 최근 reveal 된 turn 의 speakerId. */
   const activeSpeakerId = useMemo<string | null>(() => {
@@ -585,6 +631,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
       chooseTopic,
       submitCustomTopic,
       conclude,
+      submitWaitingMemo,
     },
   };
 }
