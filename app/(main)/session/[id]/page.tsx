@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -15,6 +15,7 @@ import {
 
 import { DebateControls } from '@/components/debate/DebateControls';
 import { DebateFeed } from '@/components/debate/DebateFeed';
+import { PersonaDetailDrawer } from '@/components/debate/PersonaDetailDrawer';
 import { SteeringPanel } from '@/components/debate/SteeringPanel';
 import { WaitingMemoArea } from '@/components/debate/WaitingMemoArea';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
@@ -59,8 +60,23 @@ export default function SessionRoomPage() {
     actions,
   } = useDebate(id);
   const [headerOpen, setHeaderOpen] = useState(false);
-  // 트랙 ⑤-2a — PersonaDetailDrawer 열림 대상 (⑤-2b 에서 Drawer 본체 구현)
-  const [, setSelectedMemberId] = useState<string | null>(null);
+  // 트랙 ⑤-2b — PersonaDetailDrawer 열림 대상
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+
+  /** 드로어 대상 멤버 */
+  const selectedMember = useMemo(
+    () => (selectedMemberId ? (cast.find((m) => m.id === selectedMemberId) ?? null) : null),
+    [selectedMemberId, cast],
+  );
+
+  /** 드로어에 표시할 해당 멤버의 발언만 (revealedMessages 기준) */
+  const selectedMemberMessages = useMemo(
+    () =>
+      selectedMemberId
+        ? revealedMessages.filter((m) => m.speakerId === selectedMemberId)
+        : [],
+    [selectedMemberId, revealedMessages],
+  );
 
   useEffect(() => {
     if (mounted && !session) {
@@ -78,7 +94,10 @@ export default function SessionRoomPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-32 pt-2">
+    <div
+      className="flex flex-col gap-4 pb-32 pt-2"
+      style={{ backgroundImage: 'var(--stage-bg)' }}
+    >
       <Link
         href="/"
         className="inline-flex w-fit items-center gap-1 text-xs text-text-muted hover:text-text"
@@ -239,6 +258,19 @@ export default function SessionRoomPage() {
         onSetSpeed={actions.setSpeed}
         onSkipTurn={actions.skipTurn}
       />
+
+      {/* 트랙 ⑤-2b — 페르소나 발언 필터 드로어 */}
+      {selectedMember && (
+        <PersonaDetailDrawer
+          member={selectedMember}
+          messages={selectedMemberMessages}
+          allMessages={revealedMessages}
+          chunks={chunks}
+          cast={cast}
+          open={selectedMemberId !== null}
+          onClose={() => setSelectedMemberId(null)}
+        />
+      )}
     </div>
   );
 }
