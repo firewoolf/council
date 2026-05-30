@@ -1,7 +1,7 @@
 import { CornerDownRight, HelpCircle, Megaphone, User } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
-import { TEMPERAMENT_LABEL_KR } from '@/lib/prompts/personas';
+import { LENS_LABEL_KR } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -105,7 +105,7 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
             background: `${speaker.colorTo}22`,
           }}
         >
-          {TEMPERAMENT_LABEL_KR[speaker.temperament]}
+          {LENS_LABEL_KR[speaker.trait.lens]}
         </span>
         {message.isQuestion && (
           <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">

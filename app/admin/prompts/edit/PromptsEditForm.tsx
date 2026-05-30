@@ -79,21 +79,19 @@ export function PromptsEditForm({ initial }: Props) {
         )}
       </div>
 
+      {/* Phase E — 3축 directive */}
       <div className="space-y-3">
         <div>
-          <Label>Temperament 지시 조각</Label>
+          <Label>입장 지시 조각 (stanceDirectives)</Label>
           <p className="text-xs text-text-muted">
-            각 페르소나의 기질(temperament)에 따라 합성 프롬프트에 삽입되는 한 단락.
-            5개 모두 채워야 합니다.
+            페르소나의 *입장 축* (advocate/critic/agnostic) 에 따라 합성 프롬프트에 삽입되는 한 단락.
           </p>
         </div>
         {(
           [
-            ['advocate', '옹호가 (추진/실행)'],
-            ['critic', '비판가 (리스크/허점)'],
-            ['analyst', '분석가 (데이터/구조)'],
-            ['provocateur', '독설가 (도발/직설)'],
-            ['empath', '공감가 (사람/감정)'],
+            ['advocate', '옹호자 (추진/찬성)'],
+            ['critic',   '비판자 (반대/제동)'],
+            ['agnostic', '회의자 (전제 의심)'],
           ] as const
         ).map(([key, label]) => (
           <div key={key} className="space-y-1.5">
@@ -101,13 +99,76 @@ export function PromptsEditForm({ initial }: Props) {
               {label} <code className="font-mono text-[10px] text-text-muted">{key}</code>
             </Label>
             <Textarea
-              {...register(`temperamentDirectives.${key}` as const)}
+              {...register(`stanceDirectives.${key}` as const)}
               rows={4}
               className="font-mono text-xs leading-relaxed"
             />
-            {errors.temperamentDirectives?.[key] && (
+            {errors.stanceDirectives?.[key] && (
               <p className="text-xs text-destructive">
-                {errors.temperamentDirectives[key]?.message}
+                {errors.stanceDirectives[key]?.message}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <Label>관점 지시 조각 (lensDirectives)</Label>
+          <p className="text-xs text-text-muted">
+            페르소나의 *관점 축* (analyst/empath/pragmatist) 에 따라 삽입되는 한 단락.
+          </p>
+        </div>
+        {(
+          [
+            ['analyst',    '분석가 (데이터/구조)'],
+            ['empath',     '공감가 (사람/감정)'],
+            ['pragmatist', '실용가 (업계 현실)'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="space-y-1.5">
+            <Label className="text-xs">
+              {label} <code className="font-mono text-[10px] text-text-muted">{key}</code>
+            </Label>
+            <Textarea
+              {...register(`lensDirectives.${key}` as const)}
+              rows={4}
+              className="font-mono text-xs leading-relaxed"
+            />
+            {errors.lensDirectives?.[key] && (
+              <p className="text-xs text-destructive">
+                {errors.lensDirectives[key]?.message}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <Label>표현 지시 조각 (expressionDirectives)</Label>
+          <p className="text-xs text-text-muted">
+            페르소나의 *표현 축* (provocateur/measured) 에 따라 삽입되는 한 단락.
+          </p>
+        </div>
+        {(
+          [
+            ['provocateur', '도발가 (직설/도발)'],
+            ['measured',    '측정자 (정중/구조)'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="space-y-1.5">
+            <Label className="text-xs">
+              {label} <code className="font-mono text-[10px] text-text-muted">{key}</code>
+            </Label>
+            <Textarea
+              {...register(`expressionDirectives.${key}` as const)}
+              rows={4}
+              className="font-mono text-xs leading-relaxed"
+            />
+            {errors.expressionDirectives?.[key] && (
+              <p className="text-xs text-destructive">
+                {errors.expressionDirectives[key]?.message}
               </p>
             )}
           </div>

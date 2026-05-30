@@ -25,13 +25,13 @@ import { PERSONA_MAP } from '@/lib/prompts/personas';
 import {
   ensureFacilitator,
   sanitizePanel,
-  TEMPERAMENT_COLORS,
+  LENS_COLORS,
 } from '@/lib/persona-safety';
 import { synthesizeCharacterPrompt } from '@/lib/prompts/synthesize';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
-import type { CastMember } from '@/types/persona';
+import type { CastMember, Lens, Trait } from '@/types/persona';
 
 type Step = 'input' | 'analyzing' | 'picking';
 
@@ -143,7 +143,7 @@ export default function NewSessionPage() {
             archetypeId: newArchetypeId,
             name: arch.name,
             role: arch.role,
-            temperament: arch.temperament,
+            trait: arch.trait,
             stance: m.stance, // 입장 유지 (사용자가 그 입장의 다른 캐릭터를 원한다고 가정)
             colorFrom: arch.colorFrom,
             colorTo: arch.colorTo,
@@ -167,7 +167,7 @@ export default function NewSessionPage() {
           archetypeId,
           name: arch.name,
           role: arch.role,
-          temperament: arch.temperament,
+          trait: arch.trait,
           stance: '',
           colorFrom: arch.colorFrom,
           colorTo: arch.colorTo,
@@ -177,7 +177,7 @@ export default function NewSessionPage() {
   }, []);
 
   const handleAddCustom = useCallback((input: CustomPersonaInput) => {
-    const colors = TEMPERAMENT_COLORS[input.temperament];
+    const colors = LENS_COLORS[input.trait.lens];
     const newMember: CastMember = {
       id:
         typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -186,7 +186,7 @@ export default function NewSessionPage() {
       source: 'custom',
       name: input.name,
       role: input.role,
-      temperament: input.temperament,
+      trait: input.trait,
       stance: input.stance,
       colorFrom: colors.from,
       colorTo: colors.to,
@@ -195,6 +195,23 @@ export default function NewSessionPage() {
     setCast((prev) => [...prev, newMember]);
     toast.success(`${newMember.name} 추가됨`);
   }, []);
+
+  const handleTraitChange = useCallback(
+    (memberId: string, axis: keyof Trait, newValue: string) => {
+      setCast((prev) =>
+        prev.map((m) => {
+          if (m.id !== memberId) return m;
+          const trait = { ...m.trait, [axis]: newValue };
+          const colors =
+            axis === 'lens'
+              ? LENS_COLORS[newValue as Lens]
+              : { from: m.colorFrom, to: m.colorTo };
+          return { ...m, trait, colorFrom: colors.from, colorTo: colors.to };
+        }),
+      );
+    },
+    [],
+  );
 
   const handleStart = useCallback(() => {
     if (!provider) {
@@ -266,6 +283,7 @@ export default function NewSessionPage() {
           onSwap={handleSwap}
           onAddFromPool={handleAddFromPool}
           onAddCustom={handleAddCustom}
+          onTraitChange={handleTraitChange}
           onStart={handleStart}
         />
       )}

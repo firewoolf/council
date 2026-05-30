@@ -5,26 +5,57 @@
  *
  * - BASE_PROMPT 는 모든 페르소나 프롬프트의 가장 앞에 prepend.
  * - 굴복 방지 규칙은 여기서 한 번만 명시 — 페르소나별 프롬프트는 캐릭터에만 집중.
- * - TEMPERAMENT_DIRECTIVES — 5종(advocate/critic/analyst/provocateur/empath) 토론 자세 지시 조각.
- *   composePersonaPrompt 가 cast.temperament 로 조회한다.
+ *
+ * Phase E — 3축 directive:
+ *   STANCE_DIRECTIVES    — 3종(advocate/critic/agnostic)  입장 지시 조각.
+ *   LENS_DIRECTIVES      — 3종(analyst/empath/pragmatist) 관점 지시 조각.
+ *   EXPRESSION_DIRECTIVES— 2종(provocateur/measured)       표현 지시 조각.
+ *   composePersonaPrompt 가 cast.trait 로 3종 조회해 합성한다.
  */
 
 import promptsJson from '@/data/prompts.json';
-import type { Temperament } from '@/types/persona';
+import type { StanceAxis, Lens, Expression } from '@/types/persona';
 
 export const BASE_PROMPT: string = promptsJson.basePrompt;
 export const OUTPUT_HINT: string = promptsJson.outputHint;
 
-const FALLBACK: Record<Temperament, string> = {
+// ─── Stance Directives ────────────────────────────────────────────────────────
+
+const STANCE_FALLBACK: Record<StanceAxis, string> = {
   advocate: '',
   critic: '',
-  analyst: '',
-  provocateur: '',
-  empath: '',
+  agnostic: '',
 };
 
-export const TEMPERAMENT_DIRECTIVES: Record<Temperament, string> = {
-  ...FALLBACK,
-  ...((promptsJson as { temperamentDirectives?: Record<Temperament, string> })
-    .temperamentDirectives ?? {}),
+export const STANCE_DIRECTIVES: Record<StanceAxis, string> = {
+  ...STANCE_FALLBACK,
+  ...((promptsJson as { stanceDirectives?: Record<StanceAxis, string> })
+    .stanceDirectives ?? {}),
+};
+
+// ─── Lens Directives ──────────────────────────────────────────────────────────
+
+const LENS_FALLBACK: Record<Lens, string> = {
+  analyst: '',
+  empath: '',
+  pragmatist: '',
+};
+
+export const LENS_DIRECTIVES: Record<Lens, string> = {
+  ...LENS_FALLBACK,
+  ...((promptsJson as { lensDirectives?: Record<Lens, string> })
+    .lensDirectives ?? {}),
+};
+
+// ─── Expression Directives ────────────────────────────────────────────────────
+
+const EXPRESSION_FALLBACK: Record<Expression, string> = {
+  provocateur: '',
+  measured: '',
+};
+
+export const EXPRESSION_DIRECTIVES: Record<Expression, string> = {
+  ...EXPRESSION_FALLBACK,
+  ...((promptsJson as { expressionDirectives?: Record<Expression, string> })
+    .expressionDirectives ?? {}),
 };

@@ -5,8 +5,8 @@ import { MoreHorizontal, Plus, Trash2, Replace } from 'lucide-react';
 
 import { PersonaOrb } from './PersonaOrb';
 import { cn } from '@/lib/utils';
-import { TEMPERAMENT_LABEL_KR } from '@/lib/prompts/personas';
-import type { CastMember } from '@/types/persona';
+import { STANCE_LABEL_KR, LENS_LABEL_KR, EXPRESSION_LABEL_KR } from '@/lib/prompts/personas';
+import type { CastMember, StanceAxis, Lens, Expression, Trait } from '@/types/persona';
 
 interface PersonaCardProps {
   /** 표시할 캐스트 멤버. archetype/generated/custom 모두 받음. */
@@ -25,8 +25,66 @@ interface PersonaCardProps {
   onRemove?: (memberId: string) => void;
   /** archetype 멤버 swap 시작 — 부모가 후보 드롭다운/모달 띄움. */
   onSwapStart?: (memberId: string) => void;
+  /**
+   * trait 축 변경 콜백 — 제공 시 chip 인터랙티브, 없으면 읽기 전용.
+   * picking 화면에서만 주입한다.
+   */
+  onTraitChange?: (memberId: string, axis: keyof Trait, newValue: string) => void;
   disabled?: boolean;
 }
+
+// ─── trait 3축 cycle 정의 ─────────────────────────────────────────────────────
+
+const STANCE_CYCLE: StanceAxis[] = ['advocate', 'critic', 'agnostic'];
+const LENS_CYCLE: Lens[] = ['analyst', 'empath', 'pragmatist'];
+const EXPR_CYCLE: Expression[] = ['measured', 'provocateur'];
+
+function cycleNext<T>(arr: T[], current: T): T {
+  const idx = arr.indexOf(current);
+  // arr is always non-empty and bounded by %; cast is safe
+  return arr[(idx + 1) % arr.length] as T;
+}
+
+// ─── TraitChip ───────────────────────────────────────────────────────────────
+
+function TraitChip({
+  label,
+  colorClass,
+  title,
+  onClick,
+}: {
+  label: string;
+  colorClass: string;
+  title?: string;
+  onClick?: (e: React.MouseEvent) => void;
+}) {
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        title={title}
+        onClick={onClick}
+        className={cn(
+          'flex min-h-[28px] min-w-[56px] items-center justify-center rounded-full px-2 py-0.5',
+          'font-mono text-[10px] transition-opacity hover:opacity-75 active:scale-95',
+          colorClass,
+        )}
+      >
+        {label}
+      </button>
+    );
+  }
+  return (
+    <span
+      title={title}
+      className={cn('rounded-full px-2 py-0.5 font-mono text-[10px]', colorClass)}
+    >
+      {label}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 const SOURCE_LABEL: Record<CastMember['source'], { text: string; tone: 'archetype' | 'generated' | 'custom' } | null> = {
   archetype: null, // 라벨 없음 — 기본 카드
@@ -38,7 +96,7 @@ const SOURCE_LABEL: Record<CastMember['source'], { text: string; tone: 'archetyp
  * 한 명의 CastMember 카드.
  *
  * 정보 우선순위:
- *   [orb] [이름]·····[temperament 뱃지][액션 ⋯]
+ *   [orb] [이름]·····[액션 ⋯]
  *          역할
  *          입장: ___________________ (stance, accent 강조)
  *          추천: ___________________ (recommendReason, archetype 만)
@@ -55,6 +113,7 @@ export function PersonaCard({
   onPick,
   onRemove,
   onSwapStart,
+  onTraitChange,
   disabled,
 }: PersonaCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -118,17 +177,12 @@ export function PersonaCard({
       />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
+        {/* 이름 행 — 오른쪽: pool 카드 ⊕ 또는 패널 카드 ⋯ 메뉴 */}
         <div className="flex items-baseline justify-between gap-2">
           <h3 className="truncate text-base font-semibold text-text">
             {member.name}
           </h3>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <span
-              className="rounded-full bg-surface-2 px-2 py-0.5 font-mono text-[10px] text-text-muted"
-              title={`성향: ${TEMPERAMENT_LABEL_KR[member.temperament]}`}
-            >
-              {TEMPERAMENT_LABEL_KR[member.temperament]}
-            </span>
+          <div className="flex shrink-0 items-center">
             {isPoolCard ? (
               <span className="flex size-6 items-center justify-center rounded-full bg-surface-2 text-text-muted transition-colors group-hover:bg-primary/20">
                 <Plus className="size-3.5" />
@@ -185,6 +239,70 @@ export function PersonaCard({
               </div>
             )}
           </div>
+        </div>
+
+        {/* trait 3축 칩 행 */}
+        <div className="flex flex-wrap items-center gap-1">
+          {/* stanceAxis 칩 */}
+          <TraitChip
+            label={STANCE_LABEL_KR[member.trait.stanceAxis]}
+            colorClass="bg-primary/15 text-primary"
+            title={onTraitChange ? '클릭하여 입장 변경' : `입장: ${STANCE_LABEL_KR[member.trait.stanceAxis]}`}
+            onClick={
+              onTraitChange
+                ? (e) => {
+                    e.stopPropagation();
+                    onTraitChange(
+                      member.id,
+                      'stanceAxis',
+                      cycleNext(STANCE_CYCLE, member.trait.stanceAxis),
+                    );
+                  }
+                : undefined
+            }
+          />
+          {/* lens 칩 */}
+          <TraitChip
+            label={LENS_LABEL_KR[member.trait.lens]}
+            colorClass="bg-surface-2 text-text-muted"
+            title={onTraitChange ? '클릭하여 관점 변경' : `관점: ${LENS_LABEL_KR[member.trait.lens]}`}
+            onClick={
+              onTraitChange
+                ? (e) => {
+                    e.stopPropagation();
+                    onTraitChange(
+                      member.id,
+                      'lens',
+                      cycleNext(LENS_CYCLE, member.trait.lens),
+                    );
+                  }
+                : undefined
+            }
+          />
+          {/* expression 칩 — measured 일 때는 읽기 전용에서 숨김 */}
+          {(member.trait.expression !== 'measured' || !!onTraitChange) && (
+            <TraitChip
+              label={EXPRESSION_LABEL_KR[member.trait.expression]}
+              colorClass={
+                member.trait.expression === 'provocateur'
+                  ? 'bg-accent/15 text-accent'
+                  : 'bg-surface-2/60 text-text-dim'
+              }
+              title={onTraitChange ? '클릭하여 표현 방식 변경' : `표현: ${EXPRESSION_LABEL_KR[member.trait.expression]}`}
+              onClick={
+                onTraitChange
+                  ? (e) => {
+                      e.stopPropagation();
+                      onTraitChange(
+                        member.id,
+                        'expression',
+                        cycleNext(EXPR_CYCLE, member.trait.expression),
+                      );
+                    }
+                  : undefined
+              }
+            />
+          )}
         </div>
 
         <p className="line-clamp-1 text-xs text-text-muted">{member.role}</p>

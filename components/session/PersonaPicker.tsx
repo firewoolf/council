@@ -7,19 +7,19 @@ import { PersonaCard } from '@/components/persona/PersonaCard';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { PERSONAS, TEMPERAMENT_LABEL_KR } from '@/lib/prompts/personas';
-import { TEMPERAMENT_COLORS } from '@/lib/persona-safety';
+import { PERSONAS, LENS_LABEL_KR, STANCE_LABEL_KR } from '@/lib/prompts/personas';
+import { LENS_COLORS } from '@/lib/persona-safety';
 import { cn } from '@/lib/utils';
-import type { CastMember, Temperament } from '@/types/persona';
+import type { CastMember, Expression, Lens, StanceAxis, Trait } from '@/types/persona';
 
 const FACILITATOR_ID = 'facilitator';
 const DOMAIN_EXPERT_ID = 'domain-expert';
 
-/** 커스텀 페르소나 입력 (자유 프롬프트 없음 — 4필드만). */
+/** 커스텀 페르소나 입력 (자유 프롬프트 없음 — 4필드만). Phase E: trait 3축. */
 export interface CustomPersonaInput {
   name: string;
   role: string;
-  temperament: Temperament;
+  trait: Trait;
   stance: string;
 }
 
@@ -36,6 +36,8 @@ interface PersonaPickerProps {
   onAddFromPool: (archetypeId: string) => void;
   onAddCustom: (input: CustomPersonaInput) => void;
   onStart: () => void;
+  /** trait 3축 인터랙티브 칩 변경 — PersonaCard 에 직접 전달. */
+  onTraitChange?: (memberId: string, axis: keyof Trait, newValue: string) => void;
   busy?: boolean;
 }
 
@@ -59,6 +61,7 @@ export function PersonaPicker({
   onAddFromPool,
   onAddCustom,
   onStart,
+  onTraitChange,
   busy,
 }: PersonaPickerProps) {
   const [poolOpen, setPoolOpen] = useState(false);
@@ -163,6 +166,7 @@ export function PersonaPicker({
               onSwapStart={
                 m.source === 'archetype' ? handleSwapStart : undefined
               }
+              onTraitChange={onTraitChange}
             />
           ))}
           {panelMembers.length === 0 && (
@@ -217,7 +221,7 @@ export function PersonaPicker({
                   archetypeId: p.id,
                   name: p.name,
                   role: p.role,
-                  temperament: p.temperament,
+                  trait: p.trait,
                   stance: '',
                   colorFrom: p.colorFrom,
                   colorTo: p.colorTo,
@@ -303,7 +307,7 @@ export function PersonaPicker({
                     </p>
                   </div>
                   <span className="rounded-full bg-surface px-2 py-0.5 font-mono text-[10px] text-text-muted">
-                    {TEMPERAMENT_LABEL_KR[p.temperament]}
+                    {LENS_LABEL_KR[p.trait.lens]}
                   </span>
                 </button>
               ))}
@@ -357,22 +361,33 @@ interface CustomPersonaFormProps {
   onCancel: () => void;
 }
 
-const TEMPERAMENTS: readonly Temperament[] = [
-  'advocate',
-  'critic',
-  'analyst',
-  'provocateur',
-  'empath',
+const STANCE_OPTIONS: Array<{ value: StanceAxis; label: string }> = [
+  { value: 'advocate', label: '옹호자' },
+  { value: 'critic',   label: '비판자' },
+  { value: 'agnostic', label: '회의자' },
+];
+
+const LENS_OPTIONS: Array<{ value: Lens; label: string }> = [
+  { value: 'analyst',    label: '분석가' },
+  { value: 'empath',     label: '공감가' },
+  { value: 'pragmatist', label: '실용가' },
+];
+
+const EXPRESSION_OPTIONS: Array<{ value: Expression; label: string }> = [
+  { value: 'measured',    label: '측정자' },
+  { value: 'provocateur', label: '도발가' },
 ];
 
 function CustomPersonaForm({ onSubmit, onCancel }: CustomPersonaFormProps) {
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
-  const [temperament, setTemperament] = useState<Temperament | null>(null);
+  const [stanceAxis, setStanceAxis] = useState<StanceAxis | null>(null);
+  const [lens, setLens] = useState<Lens | null>(null);
+  const [expression, setExpression] = useState<Expression>('measured');
   const [stance, setStance] = useState('');
-  const [errors, setErrors] = useState<Partial<Record<'name' | 'role' | 'temperament' | 'stance', string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<'name' | 'role' | 'stanceAxis' | 'lens' | 'stance', string>>>({});
 
-  function validate(): Partial<Record<'name' | 'role' | 'temperament' | 'stance', string>> {
+  function validate(): typeof errors {
     const err: typeof errors = {};
     const trimmedName = name.trim();
     const trimmedRole = role.trim();
@@ -383,11 +398,14 @@ function CustomPersonaForm({ onSubmit, onCancel }: CustomPersonaFormProps) {
     if (trimmedRole.length < 1 || trimmedRole.length > 40) {
       err.role = '역할은 1~40자 사이';
     }
-    if (!temperament) {
-      err.temperament = '성향을 선택해주세요';
+    if (!stanceAxis) {
+      err.stanceAxis = '입장을 선택해주세요';
+    }
+    if (!lens) {
+      err.lens = '관점을 선택해주세요';
     }
     if (trimmedStance.length < 1 || trimmedStance.length > 120) {
-      err.stance = '입장은 1~120자 사이';
+      err.stance = '이 고민에서의 주장은 1~120자 사이';
     }
     return err;
   }
@@ -399,7 +417,7 @@ function CustomPersonaForm({ onSubmit, onCancel }: CustomPersonaFormProps) {
     onSubmit({
       name: name.trim(),
       role: role.trim(),
-      temperament: temperament!,
+      trait: { stanceAxis: stanceAxis!, lens: lens!, expression },
       stance: stance.trim(),
     });
   }
@@ -436,17 +454,46 @@ function CustomPersonaForm({ onSubmit, onCancel }: CustomPersonaFormProps) {
         )}
       </div>
 
+      {/* 입장 (stanceAxis) */}
       <div className="space-y-1.5">
-        <label className="text-xs font-semibold text-text-muted">성향</label>
+        <label className="text-xs font-semibold text-text-muted">입장</label>
         <div className="flex flex-wrap gap-1.5">
-          {TEMPERAMENTS.map((t) => {
-            const active = temperament === t;
-            const colors = TEMPERAMENT_COLORS[t];
+          {STANCE_OPTIONS.map((s) => {
+            const active = stanceAxis === s.value;
             return (
               <button
-                key={t}
+                key={s.value}
                 type="button"
-                onClick={() => setTemperament(t)}
+                onClick={() => setStanceAxis(s.value)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                  active
+                    ? 'border-transparent bg-primary text-white'
+                    : 'border-border text-text-muted hover:text-text',
+                )}
+              >
+                {STANCE_LABEL_KR[s.value]}
+              </button>
+            );
+          })}
+        </div>
+        {errors.stanceAxis && (
+          <p className="text-[11px] text-rose-300">{errors.stanceAxis}</p>
+        )}
+      </div>
+
+      {/* 관점 (lens) */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-text-muted">관점</label>
+        <div className="flex flex-wrap gap-1.5">
+          {LENS_OPTIONS.map((l) => {
+            const active = lens === l.value;
+            const colors = LENS_COLORS[l.value];
+            return (
+              <button
+                key={l.value}
+                type="button"
+                onClick={() => setLens(l.value)}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs font-medium transition-all',
                   active
@@ -455,20 +502,43 @@ function CustomPersonaForm({ onSubmit, onCancel }: CustomPersonaFormProps) {
                 )}
                 style={
                   active
-                    ? {
-                        background: `linear-gradient(135deg, ${colors.from}, ${colors.to})`,
-                      }
+                    ? { background: `linear-gradient(135deg, ${colors.from}, ${colors.to})` }
                     : { borderColor: `${colors.to}55` }
                 }
               >
-                {TEMPERAMENT_LABEL_KR[t]}
+                {LENS_LABEL_KR[l.value]}
               </button>
             );
           })}
         </div>
-        {errors.temperament && (
-          <p className="text-[11px] text-rose-300">{errors.temperament}</p>
+        {errors.lens && (
+          <p className="text-[11px] text-rose-300">{errors.lens}</p>
         )}
+      </div>
+
+      {/* 표현 (expression) */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-text-muted">표현 방식</label>
+        <div className="flex flex-wrap gap-1.5">
+          {EXPRESSION_OPTIONS.map((e) => {
+            const active = expression === e.value;
+            return (
+              <button
+                key={e.value}
+                type="button"
+                onClick={() => setExpression(e.value)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                  active
+                    ? 'border-transparent bg-accent text-white'
+                    : 'border-border text-text-muted hover:text-text',
+                )}
+              >
+                {e.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="space-y-1.5">

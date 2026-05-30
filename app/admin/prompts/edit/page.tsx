@@ -4,7 +4,13 @@ import { ArrowLeft } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
 import { isEditEnabled } from '@/lib/admin/github';
-import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '@/lib/prompts/base';
+import {
+  BASE_PROMPT,
+  OUTPUT_HINT,
+  STANCE_DIRECTIVES,
+  LENS_DIRECTIVES,
+  EXPRESSION_DIRECTIVES,
+} from '@/lib/prompts/base';
 
 import { PromptsEditForm } from './PromptsEditForm';
 
@@ -49,7 +55,9 @@ export default function AdminPromptsEditPage() {
         initial={{
           basePrompt: BASE_PROMPT,
           outputHint: OUTPUT_HINT,
-          temperamentDirectives: TEMPERAMENT_DIRECTIVES,
+          stanceDirectives: STANCE_DIRECTIVES,
+          lensDirectives: LENS_DIRECTIVES,
+          expressionDirectives: EXPRESSION_DIRECTIVES,
         }}
       />
     </div>

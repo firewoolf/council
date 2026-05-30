@@ -176,7 +176,7 @@ function SortableItem({
             <p className="text-sm font-semibold text-text">{persona.name}</p>
             <p className="truncate text-xs text-text-muted">{persona.role}</p>
             <p className="mt-1 font-mono text-[10px] text-text-dim">
-              {persona.id} · {persona.debateStyle} · {persona.temperament}
+              {persona.id} · {persona.debateStyle} · {persona.trait.stanceAxis}/{persona.trait.lens}/{persona.trait.expression}
             </p>
           </div>
           <ArrowRight className="size-4 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />

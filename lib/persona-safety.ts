@@ -2,44 +2,86 @@
  * 페르소나 무결성 가드.
  *
  * Phase B-1: sanitizeRecommendedIds / sanitizeSelectedIds — 아키타입 id 환각 방지.
- * Phase B-2: TEMPERAMENT_COLORS / sanitizePanel — panelDesignSchema 결과를 CastMember[] 로 정규화.
+ * Phase B-2: LENS_COLORS / sanitizePanel — panelDesignSchema 결과를 CastMember[] 로 정규화.
+ * Phase E: TEMPERAMENT_COLORS → LENS_COLORS. sanitizePanel 은 trait 3축 정규화.
  *
  * 핵심 규칙: 절대 unknown id 로 회의에 들어가지 않는다.
  */
 
 import { PERSONAS, PERSONA_MAP } from '@/lib/prompts/personas';
 import { synthesizeCharacterPrompt } from '@/lib/prompts/synthesize';
-import type { Archetype as Persona, CastMember, Temperament } from '@/types/persona';
+import type {
+  Archetype as Persona,
+  CastMember,
+  Expression,
+  Lens,
+  StanceAxis,
+  Trait,
+} from '@/types/persona';
 import type { PanelDesign } from '@/lib/prompts/recommender';
 
 const FACILITATOR_ID = 'facilitator';
 const DOMAIN_EXPERT_ID = 'domain-expert';
 
-// ─── Phase B-2 ───────────────────────────────────────────────────────────────
+// ─── Phase E: LENS_COLORS ─────────────────────────────────────────────────────
 
-/** temperament 별 기본 orb 팔레트. generated/custom CastMember 에 사용. */
-export const TEMPERAMENT_COLORS: Record<Temperament, { from: string; to: string }> = {
-  advocate:    { from: '#047857', to: '#10B981' }, // emerald — 추진
-  critic:      { from: '#9F1239', to: '#F43F5E' }, // rose    — 경고
-  analyst:     { from: '#1E40AF', to: '#3B82F6' }, // blue    — 냉정
-  provocateur: { from: '#B45309', to: '#F59E0B' }, // amber   — 도발
-  empath:      { from: '#6D28D9', to: '#A78BFA' }, // violet  — 공감
+/**
+ * lens 별 기본 orb 팔레트.
+ * generated/custom CastMember 에 사용.
+ * lens 가 색의 *주체* — 인지 양식이 페르소나 정체성에 가장 가깝다.
+ */
+export const LENS_COLORS: Record<Lens, { from: string; to: string }> = {
+  analyst:    { from: '#1E40AF', to: '#3B82F6' }, // blue    — 냉정
+  empath:     { from: '#6D28D9', to: '#A78BFA' }, // violet  — 공감
+  pragmatist: { from: '#047857', to: '#10B981' }, // emerald — 실전
 };
 
+// ─── 축별 유효 값 집합 ────────────────────────────────────────────────────────
+
+const VALID_STANCE_AXES = new Set<StanceAxis>(['advocate', 'critic', 'agnostic']);
+const VALID_LENSES = new Set<Lens>(['analyst', 'empath', 'pragmatist']);
+const VALID_EXPRESSIONS = new Set<Expression>(['provocateur', 'measured']);
+
 const VALID_SOURCES = new Set(['archetype', 'generated']);
-const VALID_TEMPERAMENTS = new Set<Temperament>([
-  'advocate', 'critic', 'analyst', 'provocateur', 'empath',
-]);
+
+/** raw 에서 trait 를 안전하게 꺼낸다. 알 수 없는 축 값 → 안전 기본값. */
+function normalizeTrait(raw: unknown): Trait {
+  const t = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const stanceAxis: StanceAxis = VALID_STANCE_AXES.has(t.stanceAxis as StanceAxis)
+    ? (t.stanceAxis as StanceAxis)
+    : 'agnostic';
+  const lens: Lens = VALID_LENSES.has(t.lens as Lens)
+    ? (t.lens as Lens)
+    : 'pragmatist';
+  const expression: Expression = VALID_EXPRESSIONS.has(t.expression as Expression)
+    ? (t.expression as Expression)
+    : 'measured';
+  return { stanceAxis, lens, expression };
+}
+
+/**
+ * Phase E: E-1 과도기 — recommender 가 아직 `temperament: string` 을 반환하는 경우,
+ * 이를 Trait 으로 변환한다. E-2 에서 recommender 가 `trait` 객체를 반환하면
+ * normalizeTrait 이 직접 소비하므로 이 함수는 자연히 dead code 가 된다.
+ */
+const TEMPERAMENT_TO_TRAIT: Record<string, Trait> = {
+  advocate:    { stanceAxis: 'advocate', lens: 'pragmatist', expression: 'measured' },
+  critic:      { stanceAxis: 'critic',   lens: 'analyst',    expression: 'measured' },
+  analyst:     { stanceAxis: 'agnostic', lens: 'analyst',    expression: 'measured' },
+  provocateur: { stanceAxis: 'agnostic', lens: 'pragmatist', expression: 'provocateur' },
+  empath:      { stanceAxis: 'agnostic', lens: 'empath',     expression: 'measured' },
+};
+const DEFAULT_TRAIT: Trait = { stanceAxis: 'agnostic', lens: 'pragmatist', expression: 'measured' };
 
 /**
  * panelDesignSchema 결과를 CastMember[] 로 정규화한다 (스펙 §5.5).
  *
  * 처리 순서:
- *   1. source/temperament/stance 느슨한 스키마 정규화
+ *   1. source/trait/stance 느슨한 스키마 정규화
  *   2. archetype: archetypeId dedupe → PERSONA_MAP 조회 → 없으면 generated 강등
- *   3. generated: name/role 폴백 적용 → characterPrompt 합성 + TEMPERAMENT_COLORS
+ *   3. generated: name/role 폴백 적용 → characterPrompt 합성 + LENS_COLORS
  *   4. 패널 크기 < 3 → 무작위 보충 (facilitator/domain-expert 제외)
- *   5. 전원 동일 temperament 경고
+ *   5. 전원 동일 stanceAxis 경고
  */
 export function sanitizePanel(
   panel: PanelDesign['panel'],
@@ -53,11 +95,17 @@ export function sanitizePanel(
       ? (raw.source as 'archetype' | 'generated')
       : 'generated';
 
-    const temperament: Temperament = VALID_TEMPERAMENTS.has(
-      raw.temperament as Temperament,
-    )
-      ? (raw.temperament as Temperament)
-      : 'analyst';
+    // Phase E: recommender 가 trait 객체를 반환하면 normalizeTrait 사용.
+    //          아직 temperament 문자열을 반환하면 TEMPERAMENT_TO_TRAIT 폴백.
+    let trait: Trait;
+    const rawAny = raw as Record<string, unknown>;
+    if (rawAny.trait && typeof rawAny.trait === 'object') {
+      trait = normalizeTrait(rawAny.trait);
+    } else if (typeof rawAny.temperament === 'string' && rawAny.temperament) {
+      trait = TEMPERAMENT_TO_TRAIT[rawAny.temperament] ?? DEFAULT_TRAIT;
+    } else {
+      trait = DEFAULT_TRAIT;
+    }
 
     const stance = raw.stance?.trim() ?? '';
 
@@ -75,17 +123,17 @@ export function sanitizePanel(
         notes.push(`archetypeId '${archetypeId}' 없음 → generated 강등`);
         const name = raw.name ?? '전문가';
         const role = raw.role ?? '이 분야 전문가';
-        const colors = TEMPERAMENT_COLORS[temperament];
+        const colors = LENS_COLORS[trait.lens];
         cast.push({
           id: crypto.randomUUID(),
           source: 'generated',
           name,
           role,
-          temperament,
+          trait,
           stance,
           colorFrom: colors.from,
           colorTo: colors.to,
-          characterPrompt: synthesizeCharacterPrompt({ role, temperament, stance }),
+          characterPrompt: synthesizeCharacterPrompt({ role, trait, stance }),
         });
       } else {
         seenArchetypeIds.add(archetypeId);
@@ -95,7 +143,7 @@ export function sanitizePanel(
           archetypeId,
           name: arch.name,
           role: arch.role,
-          temperament: arch.temperament,
+          trait: arch.trait,
           stance,
           colorFrom: arch.colorFrom,
           colorTo: arch.colorTo,
@@ -105,17 +153,17 @@ export function sanitizePanel(
     } else {
       const name = raw.name ?? '전문가';
       const role = raw.role ?? '이 분야 전문가';
-      const colors = TEMPERAMENT_COLORS[temperament];
+      const colors = LENS_COLORS[trait.lens];
       cast.push({
         id: crypto.randomUUID(),
         source: 'generated',
         name,
         role,
-        temperament,
+        trait,
         stance,
         colorFrom: colors.from,
         colorTo: colors.to,
-        characterPrompt: synthesizeCharacterPrompt({ role, temperament, stance }),
+        characterPrompt: synthesizeCharacterPrompt({ role, trait, stance }),
       });
     }
   }
@@ -135,7 +183,7 @@ export function sanitizePanel(
         archetypeId: p.id,
         name: p.name,
         role: p.role,
-        temperament: p.temperament,
+        trait: p.trait,
         stance: '',
         colorFrom: p.colorFrom,
         colorTo: p.colorTo,
@@ -144,9 +192,9 @@ export function sanitizePanel(
     }
   }
 
-  const temps = cast.map((m) => m.temperament);
-  if (new Set(temps).size === 1) {
-    console.warn('[sanitizePanel] 전원 동일 temperament:', temps[0]);
+  const stances = cast.map((m) => m.trait.stanceAxis);
+  if (new Set(stances).size === 1) {
+    console.warn('[sanitizePanel] 전원 동일 stanceAxis:', stances[0]);
   }
 
   return { cast, notes };
@@ -170,7 +218,7 @@ export function ensureFacilitator(cast: CastMember[]): CastMember[] {
       archetypeId: FACILITATOR_ID,
       name: fArch.name,
       role: fArch.role,
-      temperament: fArch.temperament,
+      trait: fArch.trait,
       stance: '',
       colorFrom: fArch.colorFrom,
       colorTo: fArch.colorTo,

@@ -5,7 +5,7 @@ import { CornerDownRight, X } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
-import { TEMPERAMENT_LABEL_KR } from '@/lib/prompts/personas';
+import { LENS_LABEL_KR } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 import type { ChunkMeta, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -127,7 +127,7 @@ export function PersonaDetailDrawer({
                   background: `${member.colorTo}22`,
                 }}
               >
-                {TEMPERAMENT_LABEL_KR[member.temperament]}
+                {LENS_LABEL_KR[member.trait.lens]}
               </span>
               {member.stance && (
                 <span className="text-[11px] italic leading-none text-text-muted/80">

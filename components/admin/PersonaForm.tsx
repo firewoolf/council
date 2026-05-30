@@ -27,14 +27,6 @@ const DEBATE_STYLES: Array<{ value: PersonaInput['debateStyle']; label: string }
   { value: 'facilitator', label: '중재+질문' },
 ];
 
-const TEMPERAMENTS: Array<{ value: PersonaInput['temperament']; label: string; hint: string }> = [
-  { value: 'advocate', label: '옹호가 (advocate)', hint: '추진/실행' },
-  { value: 'critic', label: '비판가 (critic)', hint: '리스크/허점' },
-  { value: 'analyst', label: '분석가 (analyst)', hint: '데이터/구조' },
-  { value: 'provocateur', label: '독설가 (provocateur)', hint: '도발/직설' },
-  { value: 'empath', label: '공감가 (empath)', hint: '사람/감정' },
-];
-
 interface Props {
   initial: PersonaInput;
   /**
@@ -133,31 +125,57 @@ export function PersonaForm({ initial, mode }: Props) {
         </Field>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="반박 스타일 (debateStyle, 내부 표현)" error={errors.debateStyle?.message}>
-          <select
-            {...register('debateStyle')}
-            className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
-          >
-            {DEBATE_STYLES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label} ({s.value})
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="기질 (temperament, 사용자 노출 분류)" error={errors.temperament?.message}>
-          <select
-            {...register('temperament')}
-            className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
-          >
-            {TEMPERAMENTS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label} · {t.hint}
-              </option>
-            ))}
-          </select>
-        </Field>
+      <Field label="반박 스타일 (debateStyle, 내부 표현)" error={errors.debateStyle?.message}>
+        <select
+          {...register('debateStyle')}
+          className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
+        >
+          {DEBATE_STYLES.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label} ({s.value})
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {/* Phase E — trait 3축 */}
+      <div className="space-y-3 rounded-xl border border-border/50 p-4">
+        <Label>Trait (3축)</Label>
+        <p className="text-xs text-text-muted">Phase E — 단일 temperament 를 대체하는 3축 분류.</p>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="입장 (stanceAxis)" error={errors.trait?.stanceAxis?.message}>
+            <select
+              {...register('trait.stanceAxis')}
+              className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
+            >
+              <option value="advocate">옹호자 (advocate)</option>
+              <option value="critic">비판자 (critic)</option>
+              <option value="agnostic">회의자 (agnostic)</option>
+            </select>
+          </Field>
+
+          <Field label="관점 (lens)" error={errors.trait?.lens?.message}>
+            <select
+              {...register('trait.lens')}
+              className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
+            >
+              <option value="analyst">분석가 (analyst)</option>
+              <option value="empath">공감가 (empath)</option>
+              <option value="pragmatist">실용가 (pragmatist)</option>
+            </select>
+          </Field>
+
+          <Field label="표현 (expression)" error={errors.trait?.expression?.message}>
+            <select
+              {...register('trait.expression')}
+              className="h-9 w-full rounded-md border border-border bg-surface px-3 text-sm text-text outline-none focus:border-primary"
+            >
+              <option value="measured">측정자 (measured)</option>
+              <option value="provocateur">도발가 (provocateur)</option>
+            </select>
+          </Field>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

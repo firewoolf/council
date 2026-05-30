@@ -44,7 +44,7 @@ export default function AdminPersonaEditPage({ params }: Props) {
     role: persona.role,
     coreValue: persona.coreValue,
     debateStyle: persona.debateStyle,
-    temperament: persona.temperament,
+    trait: persona.trait,
     nonNegotiable: persona.nonNegotiable,
     weakness: persona.weakness,
     systemPrompt: persona.systemPrompt,

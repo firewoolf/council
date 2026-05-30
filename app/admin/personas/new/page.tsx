@@ -38,7 +38,7 @@ export default function AdminPersonaNewPage() {
     role: '',
     coreValue: '',
     debateStyle: 'data',
-    temperament: 'analyst',
+    trait: { stanceAxis: 'agnostic', lens: 'analyst', expression: 'measured' },
     nonNegotiable: '',
     weakness: '',
     systemPrompt:

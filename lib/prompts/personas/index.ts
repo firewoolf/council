@@ -8,10 +8,12 @@
  *     PERSONA_MAP[archetypeId] 로 라이브 조회, generated/custom 이면
  *     cast.characterPrompt 스냅샷 사용.
  *
- * 합성 순서 (스펙 §5.1):
+ * Phase E — 합성 순서 (스펙 §4.2):
  *   BASE_PROMPT
  *   + [당신의 캐릭터] 이름/역할
- *   + TEMPERAMENT_DIRECTIVE[cast.temperament]
+ *   + STANCE_DIRECTIVES[cast.trait.stanceAxis]
+ *   + LENS_DIRECTIVES[cast.trait.lens]
+ *   + EXPRESSION_DIRECTIVES[cast.trait.expression]
  *   + 캐릭터 프롬프트
  *   + [이 회의에서 당신의 입장] cast.stance (비어있으면 생략)
  *   + [사용자의 고민] concern
@@ -19,19 +21,40 @@
  */
 
 import personasJson from '@/data/personas.json';
-import type { Archetype, CastMember, Temperament } from '@/types/persona';
-import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '../base';
+import type { Archetype, CastMember, Expression, Lens, StanceAxis } from '@/types/persona';
+import {
+  BASE_PROMPT,
+  OUTPUT_HINT,
+  STANCE_DIRECTIVES,
+  LENS_DIRECTIVES,
+  EXPRESSION_DIRECTIVES,
+} from '../base';
 
 /**
- * temperament 한국어 라벨.
- * picker 뱃지·커스텀 폼 칩에서 사용. 사용자 노출 표기 단일화.
+ * stance 축 한국어 라벨.
+ * picker 뱃지·커스텀 폼 칩에서 사용.
  */
-export const TEMPERAMENT_LABEL_KR: Record<Temperament, string> = {
-  advocate:    '옹호가',
-  critic:      '비판가',
-  analyst:     '분석가',
-  provocateur: '독설가',
-  empath:      '공감가',
+export const STANCE_LABEL_KR: Record<StanceAxis, string> = {
+  advocate: '옹호자',
+  critic:   '비판자',
+  agnostic: '회의자',
+};
+
+/**
+ * lens 축 한국어 라벨.
+ */
+export const LENS_LABEL_KR: Record<Lens, string> = {
+  analyst:    '분석가',
+  empath:     '공감가',
+  pragmatist: '실용가',
+};
+
+/**
+ * expression 축 한국어 라벨.
+ */
+export const EXPRESSION_LABEL_KR: Record<Expression, string> = {
+  provocateur: '도발가',
+  measured:    '측정자',
 };
 
 /** 10개 아키타입 전체 — JSON 순서 그대로. */
@@ -47,7 +70,7 @@ export const PERSONA_MAP: Record<string, Archetype> = Object.fromEntries(
  * 한 명의 CastMember 시스템 프롬프트 합성.
  *
  * - source==='archetype' 인데 PERSONA_MAP 조회 실패(어드민 삭제) →
- *   캐릭터 프롬프트 없이라도 합성 진행. BASE + 이름/역할 + temperament 지시
+ *   캐릭터 프롬프트 없이라도 합성 진행. BASE + 이름/역할 + 3 directive
  *   + stance 만으로도 일관 동작 보장.
  * - stance 가 빈 문자열이면 stance 블록 생략 (풀 수동 추가/중립 케이스).
  */
@@ -65,11 +88,18 @@ export function composePersonaPrompt(
     characterPrompt = cast.characterPrompt;
   }
 
-  const temperamentBlock = TEMPERAMENT_DIRECTIVES[cast.temperament]?.trim()
-    ? `\n${TEMPERAMENT_DIRECTIVES[cast.temperament]}`
+  // 3축 directive 블록
+  const stanceBlock = STANCE_DIRECTIVES[cast.trait.stanceAxis]?.trim()
+    ? `\n${STANCE_DIRECTIVES[cast.trait.stanceAxis]}`
+    : '';
+  const lensBlock = LENS_DIRECTIVES[cast.trait.lens]?.trim()
+    ? `\n${LENS_DIRECTIVES[cast.trait.lens]}`
+    : '';
+  const expressionBlock = EXPRESSION_DIRECTIVES[cast.trait.expression]?.trim()
+    ? `\n${EXPRESSION_DIRECTIVES[cast.trait.expression]}`
     : '';
 
-  const stanceBlock =
+  const stanceTextBlock =
     cast.stance && cast.stance.trim().length > 0
       ? `\n\n[이 회의에서 당신의 입장]\n${cast.stance}\n\n이 입장을 토론 내내 일관되게 견지하십시오. 다른 페르소나의 반박에 논리적으로 밀리면 부분 인정은 가능하나, 핵심 입장은 끝까지 지킵니다.`
       : '';
@@ -81,9 +111,11 @@ export function composePersonaPrompt(
   return [
     BASE_PROMPT,
     `\n[당신의 캐릭터]\n당신의 이름은 "${cast.name}" 입니다. 역할: ${cast.role}.\n`,
-    temperamentBlock,
-    characterPrompt,
     stanceBlock,
+    lensBlock,
+    expressionBlock,
+    characterPrompt,
+    stanceTextBlock,
     concernBlock,
     `\n\n${OUTPUT_HINT}`,
   ]

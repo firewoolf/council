@@ -70,9 +70,13 @@ const panelMemberSchema = z.object({
     .describe('source=archetype 이면 PERSONAS 의 id, 아니면 null'),
   name: z.string().optional(),
   role: z.string().optional().describe('한 줄 역할/도메인'),
-  temperament: z
-    .string()
-    .describe('advocate / critic / analyst / provocateur / empath 중 하나'),
+  trait: z
+    .object({
+      stanceAxis: z.string().describe("'advocate' / 'critic' / 'agnostic'"),
+      lens: z.string().describe("'analyst' / 'empath' / 'pragmatist'"),
+      expression: z.string().describe("'provocateur' / 'measured'"),
+    })
+    .describe('3축 trait — stanceAxis × lens × expression'),
   stance: z
     .string()
     .describe(
@@ -135,7 +139,7 @@ ${concern}
 
 const ARCHETYPE_CATALOG = PERSONAS.map(
   (p) =>
-    `- id:"${p.id}" 이름:"${p.name}" 역할:${p.role} 핵심가치:${p.coreValue} temperament:${p.temperament}`,
+    `- id:"${p.id}" 이름:"${p.name}" 역할:${p.role} 핵심가치:${p.coreValue} 입장:${p.trait.stanceAxis} 관점:${p.trait.lens} 표현:${p.trait.expression}`,
 ).join('\n');
 
 export function buildPanelDesignPrompt(concern: string): string {
@@ -158,11 +162,14 @@ ${concern}
    source:"generated" 으로 그 분야 전문가를 즉석 설계한다.
    - name: 한국어 이름 (예: "베테랑 수의사", "군 창업 전문가")
    - role: 한 줄 역할/도메인
-   - temperament: advocate / critic / analyst / provocateur / empath 중 하나
-5. 입장(stance)은 "성향"이 아니라 "이 고민에서의 구체적 주장"이다.
+5. 각 멤버에게 trait 3축을 배정한다:
+   - stanceAxis: 이 고민에서의 입장 축 — advocate(추진) / critic(제동) / agnostic(전제의심)
+   - lens: 사고 방식 축 — analyst(데이터/논리) / empath(사람/감정) / pragmatist(현실/관행)
+   - expression: 발언 방식 — provocateur(직설적) / measured(구조적)
+6. 입장(stance)은 "성향"이 아니라 "이 고민에서의 구체적 주장"이다.
    ✗ "비판적 관점에서 보는 사람"
    ✓ "동물병원 SaaS는 원장 1인 체제 특성상 6개월 안에 시스템을 바꾸지 않는다. 지금 당장 파일럿 계약 없이 개발부터 하지 말라"
-6. reason 은 "왜 이 사람이 이 패널에 필요한가" (50자 이내).
+7. reason 은 "왜 이 사람이 이 패널에 필요한가" (50자 이내).
 
 [출력]
 스키마에 정의된 JSON 구조로만 응답.`;

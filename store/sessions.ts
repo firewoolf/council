@@ -6,19 +6,17 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Conclusion } from '@/lib/prompts/orchestrator';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
 import type { ChunkMeta, Message, Session } from '@/types/debate';
-import type { Archetype, CastMember } from '@/types/persona';
+import type { Archetype, CastMember, Trait } from '@/types/persona';
 
 /**
  * 세션 + 메시지 로컬 저장소.
  * Supabase 도입 전까지 LocalStorage가 단일 진실 공급원.
  *
- * Phase B 마이그레이션 (v0 → v1):
- *   v0: sessionPersonas: Record<sessionId, string[]>
- *       + sessionStances: Record<sessionId, Record<personaId, string>>  (Phase A)
- *   v1: sessionCast:    Record<sessionId, CastMember[]>
+ * 마이그레이션:
+ *   v0 → v1 (Phase B): sessionPersonas(string[]) → sessionCast(CastMember[])
+ *   v1 → v2 (Phase E): CastMember.temperament(enum) → CastMember.trait(3축 객체)
  *
- * v0 → v1 변환은 모든 personaId 가 아키타입(고정 10명) 출신이라는 가정에서
- * 안전하다. 모르는 id 는 드롭하되 앱은 살려둔다.
+ * 모르는 값 → 안전 기본값으로 강등하되 세션/cast 는 살린다 (B-1 패턴 그대로).
  *
  * 저장 단위:
  *   sessions: Record<sessionId, Session>
@@ -100,6 +98,56 @@ function summarizeTitle(concern: string): string {
   return `${trimmed.slice(0, 38)}…`;
 }
 
+// ─── Phase E: v1 → v2 마이그레이션 헬퍼 ─────────────────────────────────────
+
+/** Phase B 의 단일 temperament enum → v2 3축 기본값 매핑. */
+const TEMPERAMENT_TO_TRAIT: Record<string, Trait> = {
+  advocate:    { stanceAxis: 'advocate', lens: 'pragmatist', expression: 'measured' },
+  critic:      { stanceAxis: 'critic',   lens: 'analyst',    expression: 'measured' },
+  analyst:     { stanceAxis: 'agnostic', lens: 'analyst',    expression: 'measured' },
+  provocateur: { stanceAxis: 'agnostic', lens: 'pragmatist', expression: 'provocateur' },
+  empath:      { stanceAxis: 'agnostic', lens: 'empath',     expression: 'measured' },
+};
+const DEFAULT_TRAIT: Trait = { stanceAxis: 'agnostic', lens: 'pragmatist', expression: 'measured' };
+
+/**
+ * v1 → v2: CastMember.temperament → CastMember.trait
+ *
+ * - archetype 멤버는 PERSONA_MAP 의 최신 trait 로 덮어씀 (가장 정확).
+ * - generated/custom 멤버는 TEMPERAMENT_TO_TRAIT 표로 변환.
+ * - 알 수 없는 값 → DEFAULT_TRAIT. cast/session 은 살린다.
+ */
+function migrateV1ToV2(persisted: Partial<SessionsState>): Partial<SessionsState> {
+  const sessionCast: Record<string, CastMember[]> = {};
+
+  for (const [sid, members] of Object.entries(persisted.sessionCast ?? {})) {
+    sessionCast[sid] = members.map((m) => {
+      // 이미 trait 가 있으면 그대로 (중복 마이그레이션 방지)
+      if (m.trait && m.trait.stanceAxis) return m;
+
+      const oldTemperament = (m as unknown as Record<string, unknown>).temperament as string | undefined;
+
+      let trait: Trait;
+      if (m.source === 'archetype' && m.archetypeId) {
+        // 아키타입은 최신 personas.json 의 trait 를 우선
+        const arch = PERSONA_MAP[m.archetypeId];
+        trait = arch ? arch.trait : (TEMPERAMENT_TO_TRAIT[oldTemperament ?? ''] ?? DEFAULT_TRAIT);
+      } else {
+        trait = TEMPERAMENT_TO_TRAIT[oldTemperament ?? ''] ?? DEFAULT_TRAIT;
+      }
+
+      // temperament 필드 제거 (필요 없는 키 정리)
+      const { temperament: _t, ...rest } = m as CastMember & { temperament?: unknown };
+      void _t;
+      return { ...rest, trait } as CastMember;
+    });
+  }
+
+  return { ...persisted, sessionCast };
+}
+
+// ─── Phase B: v0 → v1 마이그레이션 ───────────────────────────────────────────
+
 /**
  * v0 → v1 데이터 변환.
  * 옛 `sessionPersonas`(string[]) + `sessionStances` 를 `sessionCast` 로 합친다.
@@ -131,7 +179,7 @@ function migrateV0ToV1(persisted: unknown): Partial<SessionsState> {
         archetypeId: aid,
         name: arch.name,
         role: arch.role,
-        temperament: arch.temperament,
+        trait: arch.trait,
         stance: old.sessionStances?.[sid]?.[aid] ?? '',
         colorFrom: arch.colorFrom,
         colorTo: arch.colorTo,
@@ -295,12 +343,19 @@ export const useSessionsStore = create<SessionsState>()(
     }),
     {
       name: 'council:sessions',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
       migrate: (persisted, version) => {
-        if (version >= 1) return persisted as SessionsState;
-        // v0 → v1 (Phase B 마이그레이션)
-        return migrateV0ToV1(persisted) as SessionsState;
+        let state = persisted as Partial<SessionsState>;
+        // v0 → v1 (Phase B: sessionPersonas → sessionCast)
+        if (version < 1) {
+          state = migrateV0ToV1(state);
+        }
+        // v1 → v2 (Phase E: temperament → trait)
+        if (version < 2) {
+          state = migrateV1ToV2(state);
+        }
+        return state as SessionsState;
       },
     },
   ),

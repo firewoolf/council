@@ -4,13 +4,18 @@ import { ArrowLeft, Lock, Pencil } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
 import { isEditEnabled } from '@/lib/admin/github';
-import { BASE_PROMPT, OUTPUT_HINT, TEMPERAMENT_DIRECTIVES } from '@/lib/prompts/base';
+import {
+  BASE_PROMPT,
+  OUTPUT_HINT,
+  STANCE_DIRECTIVES,
+  LENS_DIRECTIVES,
+  EXPRESSION_DIRECTIVES,
+} from '@/lib/prompts/base';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * 공통 프롬프트 (BASE_PROMPT + OUTPUT_HINT) — 읽기 전용 (Phase 2).
- * Phase 3에서 편집 활성화.
+ * 공통 프롬프트 (BASE_PROMPT + OUTPUT_HINT + 3축 directive) — 읽기 전용.
  */
 export default function AdminPromptsPage() {
   if (!isAdminEnabled()) redirect('/admin');
@@ -71,19 +76,17 @@ export default function AdminPromptsPage() {
         </pre>
       </section>
 
+      {/* Phase E — 3축 directive */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-text">Temperament 지시 조각</h2>
+        <h2 className="text-sm font-semibold text-text">입장 지시 조각 (stanceDirectives)</h2>
         <p className="text-xs text-text-muted">
-          페르소나의 기질(temperament)에 따라 합성 프롬프트에 삽입되는 한 단락.
-          5개 모두 운영자가 어드민에서 편집 가능합니다.
+          페르소나의 입장 축(advocate/critic/agnostic)에 따라 합성 프롬프트에 삽입됩니다.
         </p>
         {(
           [
-            ['advocate', '옹호가'],
-            ['critic', '비판가'],
-            ['analyst', '분석가'],
-            ['provocateur', '독설가'],
-            ['empath', '공감가'],
+            ['advocate', '옹호자'],
+            ['critic',   '비판자'],
+            ['agnostic', '회의자'],
           ] as const
         ).map(([key, label]) => (
           <div key={key} className="space-y-1">
@@ -91,7 +94,52 @@ export default function AdminPromptsPage() {
               {label} <code className="font-mono text-[10px]">{key}</code>
             </p>
             <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-surface-2 p-3 text-xs leading-relaxed text-text/90">
-              {TEMPERAMENT_DIRECTIVES[key] || '(비어있음)'}
+              {STANCE_DIRECTIVES[key] || '(비어있음)'}
+            </pre>
+          </div>
+        ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-text">관점 지시 조각 (lensDirectives)</h2>
+        <p className="text-xs text-text-muted">
+          페르소나의 관점 축(analyst/empath/pragmatist)에 따라 합성 프롬프트에 삽입됩니다.
+        </p>
+        {(
+          [
+            ['analyst',    '분석가'],
+            ['empath',     '공감가'],
+            ['pragmatist', '실용가'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="space-y-1">
+            <p className="text-xs font-medium text-text-muted">
+              {label} <code className="font-mono text-[10px]">{key}</code>
+            </p>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-surface-2 p-3 text-xs leading-relaxed text-text/90">
+              {LENS_DIRECTIVES[key] || '(비어있음)'}
+            </pre>
+          </div>
+        ))}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-text">표현 지시 조각 (expressionDirectives)</h2>
+        <p className="text-xs text-text-muted">
+          페르소나의 표현 축(provocateur/measured)에 따라 합성 프롬프트에 삽입됩니다.
+        </p>
+        {(
+          [
+            ['provocateur', '도발가'],
+            ['measured',    '측정자'],
+          ] as const
+        ).map(([key, label]) => (
+          <div key={key} className="space-y-1">
+            <p className="text-xs font-medium text-text-muted">
+              {label} <code className="font-mono text-[10px]">{key}</code>
+            </p>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-border bg-surface-2 p-3 text-xs leading-relaxed text-text/90">
+              {EXPRESSION_DIRECTIVES[key] || '(비어있음)'}
             </pre>
           </div>
         ))}
