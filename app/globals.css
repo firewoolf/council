@@ -112,3 +112,29 @@
   from { opacity: 0; transform: translateX(-12px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+
+/* ============================================================
+   트랙 ⑤-2b — PersonaDetailDrawer 애니메이션
+   ============================================================ */
+
+/* 드로어 진입 — 모바일: 하단에서 올라옴 */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* 드로어 진입 — 데스크탑(sm+): 우측에서 슬라이드 */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+/* 반응형 드로어 진입 클래스 — CSS 미디어쿼리로 keyframe 전환 */
+.drawer-enter {
+  animation: slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@media (min-width: 640px) {
+  .drawer-enter {
+    animation: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
