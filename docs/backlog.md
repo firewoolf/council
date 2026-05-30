@@ -34,6 +34,21 @@ Gold standard reference: `docs/example-target-discussion.md` (Opus, 2026-05-26).
 **갱신 (2026-05-26):** §7.1 PersonaCard 뱃지를 *클릭 cycle* 로 박제 — 사용자 피드백 반영.
 출하 단위 2개: E-1 데이터 모델 + 마이그레이션 / E-2 추천기 + UI (인터랙티브 칩 포함).
 
+### 트랙 ⑤-1f-C — 대기 발언화 (출하 직전)
+사용자 피드백(2026-05-31) — "대기 시간이 비어있지 않게": WaitingMemoArea 의
+*기본값을 발언* 으로 전환. 메모 입력 즉시 회의록 카드로 표시 + 다음 청크가
+받게 함. 시그널 모드는 옵션. 토글 UI 명시화.
+
+### 트랙 ⑤-5 게임화 (NPC 몰입) — Phase E 후 진입 가능
+워크오더 `docs/workorder-debate-5-5-gamify.md` (Opus, 2026-05-31).
+**진단:** ⑤-2 가 공간 메타포는 구축했지만 *캐릭터 메타포* 약함. 사용자가 패널을
+ChatGPT 의 다인 페르소나가 아닌 *NPC* 로 느끼게 해야.
+**범위:** ⑤-5a 시그니처 진입 멘트 + Aha 모먼트 / ⑤-5b SteeringPanel 결정 무게 /
+⑤-5c 분야 배경 + 호명 강조.
+**영감:** Disco Elysium · Mass Effect · Persona 5 · Detroit: Become Human · Inworld.
+**부록 A·B·C 본문 Opus 박제 완료** — signatureLine 10명·keypoint-pulse CSS·
+DOMAIN_STAGE_BG 매핑.
+
 ### 트랙① Phase B-3 (선택) — Supabase `session_cast` 마이그레이션
 미연결이라 블로킹 아님. 워크오더 §6.
 
