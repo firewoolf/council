@@ -49,6 +49,15 @@ ChatGPT 의 다인 페르소나가 아닌 *NPC* 로 느끼게 해야.
 **부록 A·B·C 본문 Opus 박제 완료** — signatureLine 10명·keypoint-pulse CSS·
 DOMAIN_STAGE_BG 매핑.
 
+### 트랙 ③ 카드별 디렉션 — 감독 메타포 실현 (1순위)
+워크오더 `docs/workorder-debate-3-card-direction.md` (Opus, 2026-05-31).
+**진단:** 인터랙션·메타포 동시 임팩트. 잡스 강조: "사용자가 *감독* 으로 — 채팅을 보는 게
+아니라 *연출* 을 고르는 사람."
+**해결:** 발언 카드 → DirectionMenu 5 액션 (tighten/specify/reframe/rebut/ask-user).
+다음 청크 transcript 에 시스템 지시로 주입. ⑤-1f-C 패턴 재사용.
+출하 단위 2개: ③-a 메뉴 + 주입 (블로킹) / ③-b long-press + 배지 (UX).
+**부록 A formatDirection 본문 Opus 박제 완료** — 굴복 금지 가드 내장.
+
 ### 트랙① Phase B-3 (선택) — Supabase `session_cast` 마이그레이션
 미연결이라 블로킹 아님. 워크오더 §6.
 
