@@ -93,6 +93,16 @@
 
   /* 회의실 배경 오버레이 (⑤-2b 에서 확장) */
   --stage-bg: radial-gradient(circle at 50% -20%, color-mix(in srgb, hsl(var(--surface)) 50%, transparent), transparent 70%);
+
+  /* ⑤-5a — Aha 모먼트 발광 색 (isKeyPoint 카드 reveal 시 1회 펄스) */
+  --accent-glow: color-mix(in srgb, hsl(var(--accent)) 60%, transparent);
+}
+
+/* ⑤-5a — Aha 모먼트. isKeyPoint 발언 카드가 reveal 될 때 1회 발광 */
+@keyframes keypoint-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  35%      { box-shadow: 0 0 24px 4px var(--accent-glow); }
+  70%      { box-shadow: 0 0 12px 2px var(--accent-glow); }
 }
 
 /* 화자 맥동 — speaking 상태 */

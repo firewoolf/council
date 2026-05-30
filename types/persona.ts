@@ -99,6 +99,11 @@ export interface Archetype {
   colorTo: string;
   /** 사용자에게 던질 수 있는 샘플 질문 — UX 힌트용 */
   userQuestions: string[];
+  /**
+   * ⑤-5a — 회의에 들어올 때 외치는 시그니처 한 줄. 캐릭터 정체성 표시용.
+   * 첫 발언 카드 상단에 italic 한 줄로 표시. 옵셔널 (없으면 표시 안 함).
+   */
+  signatureLine?: string;
 }
 
 /**

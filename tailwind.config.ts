@@ -58,6 +58,8 @@ const config: Config = {
         'orb-pulse':  'orb-pulse 1.5s ease-in-out infinite',
         'orb-bob':    'orb-bob 0.6s ease-in-out infinite',
         'card-enter': 'card-enter 0.4s ease-out',
+        // 트랙 ⑤-5a — Aha 모먼트 (isKeyPoint 1회 발광)
+        'keypoint-pulse': 'keypoint-pulse 0.8s ease-out',
       },
     },
   },

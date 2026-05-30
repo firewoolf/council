@@ -112,6 +112,22 @@ export function DebateFeed({
   }, [cast]);
 
   /**
+   * ⑤-5a — 멤버별 *첫 발언* 메시지 ID 집합.
+   * 회의 전체에서 그 멤버가 처음 말한 카드에만 시그니처 표시.
+   */
+  const firstSpeakerMessageIds = useMemo(() => {
+    const seen = new Set<string>();
+    const firsts = new Set<string>();
+    for (const m of messages) {
+      if (m.speakerId === null) continue;
+      if (seen.has(m.speakerId)) continue;
+      seen.add(m.speakerId);
+      firsts.add(m.id);
+    }
+    return firsts;
+  }, [messages]);
+
+  /**
    * 청크 단위 그루핑.
    * 결과 구조: [{ chunkId: undefined, messages: [...] }, { chunkId: 'xxx', meta, messages: [...] }, ...]
    * chunkId 없는 옛 메시지가 있으면 맨 앞 단일 그룹으로 둔다.
@@ -225,6 +241,7 @@ export function DebateFeed({
                   message={m}
                   speaker={speaker}
                   replyTarget={replyTarget}
+                  showSignature={firstSpeakerMessageIds.has(m.id)}
                 />
               );
             })}

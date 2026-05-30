@@ -1,7 +1,7 @@
-import { CornerDownRight, HelpCircle, Megaphone, User } from 'lucide-react';
+import { CornerDownRight, HelpCircle, Megaphone, Sparkles, User } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
-import { LENS_LABEL_KR } from '@/lib/prompts/personas';
+import { LENS_LABEL_KR, SIGNATURE_LINES } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -12,6 +12,12 @@ interface MessageCardProps {
   speaker: CastMember | null;
   /** 반박 대상 메시지의 발언자 (페르소나) — replyTo가 있을 때만 */
   replyTarget?: { speakerName: string; preview: string } | null;
+  /**
+   * ⑤-5a — 회의 전체에서 이 멤버의 *첫 발언* 이면 true.
+   * archetype 이고 SIGNATURE_LINES 에 등록돼 있으면 시그니처 한 줄을 카드 상단에 표시.
+   * 부모(DebateFeed)가 멤버별 첫 발언 ID 를 계산해 전달.
+   */
+  showSignature?: boolean;
 }
 
 /**
@@ -22,8 +28,17 @@ interface MessageCardProps {
  *  - 사용자 발언: 우측 정렬 / 다른 톤 (회색 surface-2)
  *
  * CLAUDE.md ⓬: 말풍선 디자인 금지 → "카드" 형태로.
+ *
+ * ⑤-5a 게임화:
+ *   · 첫 발언 시 archetype 시그니처 한 줄 (italic, 상단)
+ *   · isKeyPoint 발언은 keypoint-pulse 1회 발광 + ★ 마커 (Aha 모먼트)
  */
-export function MessageCard({ message, speaker, replyTarget }: MessageCardProps) {
+export function MessageCard({
+  message,
+  speaker,
+  replyTarget,
+  showSignature,
+}: MessageCardProps) {
   const isUser = speaker === null;
   const isInstruction = message.kind === 'instruction';
 
@@ -66,12 +81,18 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
   // 트랙 ⑤-2a — 좌측 색띠 두께: 기본 6px, isKeyPoint 8px
   const borderLeftWidth = message.isKeyPoint ? 8 : 6;
 
+  // ⑤-5a — archetype 출신만 시그니처 표시 (generated/custom 은 없음)
+  const signature =
+    showSignature && speaker.source === 'archetype' && speaker.archetypeId
+      ? SIGNATURE_LINES[speaker.archetypeId]
+      : undefined;
+
   return (
     <div
       className={cn(
         'relative flex flex-col gap-2 rounded-xl border p-4 animate-card-enter',
         message.isKeyPoint
-          ? 'border-accent/50'
+          ? 'border-accent/50 animate-keypoint-pulse'
           : 'border-border',
       )}
       style={{
@@ -97,7 +118,7 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
       <div className="flex items-center gap-2">
         <PersonaOrb persona={speaker} size={28} glow="soft" />
         <span className="text-sm font-semibold text-text">{speaker.name}</span>
-        {/* 트랙 ⑤-2a — temperament 미니 칩 */}
+        {/* lens 미니 칩 (⑤-2a, Phase E 이후 lens 표기) */}
         <span
           className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium leading-none"
           style={{
@@ -107,6 +128,16 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
         >
           {LENS_LABEL_KR[speaker.trait.lens]}
         </span>
+        {/* ⑤-5a — isKeyPoint 핵심 발언 마커 (Persona 5 Aha 모먼트) */}
+        {message.isKeyPoint && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-accent"
+            title="이 청크의 핵심 발언"
+          >
+            <Sparkles className="size-3" />
+            핵심
+          </span>
+        )}
         {message.isQuestion && (
           <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-medium text-accent">
             <HelpCircle className="size-3" />
@@ -114,6 +145,16 @@ export function MessageCard({ message, speaker, replyTarget }: MessageCardProps)
           </span>
         )}
       </div>
+
+      {/* ⑤-5a 시그니처 한 줄 — 첫 발언일 때만 (캐릭터 정체성) */}
+      {signature && (
+        <p
+          className="border-l-2 px-2 py-0.5 text-xs italic leading-relaxed text-text-muted/90"
+          style={{ borderLeftColor: `${speaker.colorTo}88` }}
+        >
+          &ldquo;{signature}&rdquo;
+        </p>
+      )}
 
       {/* 본문 */}
       <p className="whitespace-pre-wrap text-base font-normal leading-relaxed text-text">

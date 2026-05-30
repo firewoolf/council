@@ -57,6 +57,25 @@ export const EXPRESSION_LABEL_KR: Record<Expression, string> = {
   measured:    '측정자',
 };
 
+/**
+ * ⑤-5a — archetype 별 시그니처 멘트.
+ * 그 페르소나가 회의에서 *처음 발언* 할 때 카드 상단에 italic 한 줄로 표시.
+ * archetypeId 가 SIGNATURE_LINES 에 없으면(generated/custom) 표시 안 함.
+ * 게임 영감: 동급생 / 프린세스 메이커 등 클래식 시뮬의 *캐릭터 시그니처 인사*.
+ */
+export const SIGNATURE_LINES: Record<string, string> = {
+  'cold-investor':       '결정은 숫자에서 갈린다.',
+  'cynical-dev':         '우리는 이미 한 번 망해본 적이 있어.',
+  'jobs-designer':       '이게 *왜* 존재해야 합니까?',
+  'realist':             '이론은 매끈하지만 현장은 그렇지 않습니다.',
+  'startup-expert':      '구조를 보면 결정이 보입니다.',
+  'branding-strategist': '사람들이 기억하는 것은 결정의 잔향뿐입니다.',
+  'psychologist':        '결정 뒤에는 사람이 남습니다.',
+  'growth-marketer':     '지금 안 움직이면 6개월 뒤엔 늦습니다.',
+  'domain-expert':       '그 분야의 *진짜 문제* 는 다른 데 있어요.',
+  'facilitator':         '우리가 *진짜로* 풀어야 할 질문이 뭡니까?',
+};
+
 /** 10개 아키타입 전체 — JSON 순서 그대로. */
 export const PERSONAS: readonly Archetype[] =
   personasJson as readonly Archetype[];
