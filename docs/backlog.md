@@ -49,7 +49,17 @@ ChatGPT 의 다인 페르소나가 아닌 *NPC* 로 느끼게 해야.
 **부록 A·B·C 본문 Opus 박제 완료** — signatureLine 10명·keypoint-pulse CSS·
 DOMAIN_STAGE_BG 매핑.
 
-### 트랙 ③ 카드별 디렉션 — 감독 메타포 실현 (1순위)
+### 트랙 ② 결정 지도형 결론 — 1순위
+워크오더 `docs/workorder-debate-2-decision-map.md` (Opus, 2026-05-31).
+**진단:** 현재 4섹션 *판결문* 결론 = AI 가 정답 내려줌 → ChatGPT 와 결과물 차별 없음.
+강제 수렴이 인사이트를 죽임.
+**해결:** `consensus / divided / openQuestions` 3분류 *결정 지도*. ★ "끝내 갈린 것"
+이 가장 값짐 — 사용자가 직접 결정할 트레이드오프 보존.
+**호환:** 옛 conclusion (v1 4섹션) 데이터는 옛 UI 그대로 (회귀 0). 신규만 v2.
+**부록 A buildConclusionPrompt 본문 Opus 박제 완료** — 강제 수렴·굴복 금지 가드 내장.
+출하 단위: ②-a 재설계 (블로킹) / ②-b 공유·마크다운 (옵션).
+
+### 트랙 ③ 카드별 디렉션 — 감독 메타포 실현 (출하 완료)
 워크오더 `docs/workorder-debate-3-card-direction.md` (Opus, 2026-05-31).
 **진단:** 인터랙션·메타포 동시 임팩트. 잡스 강조: "사용자가 *감독* 으로 — 채팅을 보는 게
 아니라 *연출* 을 고르는 사람."
