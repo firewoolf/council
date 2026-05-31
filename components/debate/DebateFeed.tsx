@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react';
 import { MessageCard } from './MessageCard';
 import { PersonaStageStrip } from './PersonaStageStrip';
 import { cn } from '@/lib/utils';
-import type { ChunkMeta, Message } from '@/types/debate';
+import type { ChunkMeta, DirectionAction, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
 interface DebateFeedProps {
@@ -27,6 +27,11 @@ interface DebateFeedProps {
   thinkingMemberId?: string | null;
   /** 트랙 ⑤-2a — orb 클릭 → PersonaDetailDrawer 열기 (⑤-2b 본체). */
   onSelectMember?: (memberId: string) => void;
+  /**
+   * 트랙 ③ — 카드별 디렉션 전송.
+   * 제공 시 페르소나 카드 우상단 ⋯ 버튼이 활성화된다.
+   */
+  onDirect?: (action: DirectionAction) => void;
 }
 
 /** 바닥 근처로 판정할 스크롤 임계값(px). */
@@ -55,6 +60,7 @@ export function DebateFeed({
   activeSpeakerId = null,
   thinkingMemberId = null,
   onSelectMember,
+  onDirect,
 }: DebateFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -242,6 +248,8 @@ export function DebateFeed({
                   speaker={speaker}
                   replyTarget={replyTarget}
                   showSignature={firstSpeakerMessageIds.has(m.id)}
+                  cast={cast}
+                  onDirect={onDirect}
                 />
               );
             })}

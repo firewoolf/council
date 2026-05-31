@@ -222,6 +222,7 @@ export default function SessionRoomPage() {
         activeSpeakerId={activeSpeakerId}
         thinkingMemberId={thinkingMemberId}
         onSelectMember={setSelectedMemberId}
+        onDirect={actions.submitDirection}
         emptyHint={
           phase === 'idle'
             ? '"토론 시작"을 누르면 첫 청크가 생성됩니다.'

@@ -81,3 +81,19 @@ export interface SessionPersona {
   isActive: boolean;
   joinedAt: string; // ISO
 }
+
+/**
+ * 트랙 ③ — 카드별 감독 디렉션.
+ * 회의록에 추가되지 않고, 다음 청크 생성 시 transcript 끝 시스템 지시로 1회 주입 후 비워진다.
+ */
+export type DirectionAction =
+  /** 이 사람에게: 더 세게 말해줘 */
+  | { kind: 'tighten'; targetMemberId: string; targetMessageId: string }
+  /** 이 사람에게: 근거 더 구체적으로 */
+  | { kind: 'specify'; targetMemberId: string; targetMessageId: string }
+  /** 이 사람에게: 다른 각도에서 다시 */
+  | { kind: 'reframe'; targetMemberId: string; targetMessageId: string }
+  /** 다른 사람에게 반박시키기 */
+  | { kind: 'rebut'; targetMemberId: string; targetMessageId: string; byMemberId: string }
+  /** 이 사람이 사용자에게 질문하게 */
+  | { kind: 'ask-user'; targetMemberId: string; targetMessageId: string };

@@ -1,9 +1,13 @@
-import { CornerDownRight, HelpCircle, Megaphone, Sparkles, User } from 'lucide-react';
+'use client';
 
+import { useState } from 'react';
+import { CornerDownRight, HelpCircle, Megaphone, MoreHorizontal, Sparkles, User } from 'lucide-react';
+
+import { DirectionMenu } from './DirectionMenu';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { LENS_LABEL_KR, SIGNATURE_LINES } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
-import type { Message } from '@/types/debate';
+import type { DirectionAction, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
 interface MessageCardProps {
@@ -18,6 +22,17 @@ interface MessageCardProps {
    * 부모(DebateFeed)가 멤버별 첫 발언 ID 를 계산해 전달.
    */
   showSignature?: boolean;
+  /**
+   * 트랙 ③ — 패널 전원 (DirectionMenu rebut 후보용).
+   * onDirect 와 함께 제공. 없으면 디렉션 메뉴 비활성.
+   */
+  cast?: readonly CastMember[];
+  /**
+   * 트랙 ③ — 디렉션 전송 콜백.
+   * 제공 시 페르소나 카드 우상단에 ⋯ 버튼 노출 → DirectionMenu.
+   * 사용자 카드·메타지시 카드는 무시.
+   */
+  onDirect?: (action: DirectionAction) => void;
 }
 
 /**
@@ -38,9 +53,15 @@ export function MessageCard({
   speaker,
   replyTarget,
   showSignature,
+  cast,
+  onDirect,
 }: MessageCardProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const isUser = speaker === null;
   const isInstruction = message.kind === 'instruction';
+  // ⋯ 버튼 노출 조건: 페르소나 발언 + onDirect 제공됨
+  const canDirect = !isUser && !isInstruction && !!onDirect && !!cast;
 
   // 사용자 메타 지시 — 중앙 정렬 + 다른 톤. 토론과 별개 채널임을 시각적으로 분리.
   if (isInstruction) {
@@ -102,6 +123,39 @@ export function MessageCard({
         background: `linear-gradient(135deg, ${speaker.colorFrom}05, transparent 40%), hsl(var(--surface))`,
       }}
     >
+      {/* 트랙 ③ — 카드 우상단 ⋯ 버튼 + DirectionMenu */}
+      {canDirect && (
+        <div className="absolute right-2 top-2 z-10">
+          <button
+            type="button"
+            aria-label="디렉션 메뉴 열기"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            className={cn(
+              'flex size-6 items-center justify-center rounded-md text-text-muted/50 transition-colors',
+              'hover:bg-surface-2 hover:text-text-muted',
+              menuOpen && 'bg-surface-2 text-text-muted',
+            )}
+          >
+            <MoreHorizontal className="size-3.5" />
+          </button>
+          {menuOpen && (
+            <DirectionMenu
+              message={message}
+              speaker={speaker!}
+              cast={cast!}
+              onClose={() => setMenuOpen(false)}
+              onSubmit={(action) => {
+                onDirect!(action);
+                setMenuOpen(false);
+              }}
+            />
+          )}
+        </div>
+      )}
+
       {/* 반박 연결선 */}
       {replyTarget && (
         <div className="flex items-center gap-1.5 text-xs text-accent">

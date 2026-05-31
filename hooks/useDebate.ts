@@ -9,10 +9,11 @@ import { AiCallError } from '@/lib/ai/errors';
 import { PROVIDERS } from '@/lib/ai/providers';
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
+import { formatDirection, getDirectionLabel } from '@/lib/prompts/directions';
 import { readingTime } from '@/lib/utils';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
-import type { ChunkMeta, Message, NextTopicChoice } from '@/types/debate';
+import type { ChunkMeta, DirectionAction, Message, NextTopicChoice } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
 /**
@@ -92,6 +93,12 @@ interface UseDebateReturn {
      *   asUtterance=true  → 즉시 사용자 발언 메시지로 추가
      */
     submitWaitingMemo: (text: string, opts: { asUtterance: boolean }) => void;
+    /**
+     * 트랙 ③ — 카드별 감독 디렉션.
+     * pendingDirectionsRef 에 누적. 다음 청크 생성 시 transcript 끝에 시스템 지시로 주입 후 비워짐.
+     * 발언이 아니므로 회의록에 추가되지 않는다.
+     */
+    submitDirection: (action: DirectionAction) => void;
   };
 }
 
@@ -221,6 +228,10 @@ export function useDebate(sessionId: string): UseDebateReturn {
   // 발언이 아니라 다음 청크의 transcript 끝에 "[사용자 메모]" 로 한 번 주입되고 비워짐.
   const pendingMemoRef = useRef<string | null>(null);
 
+  // 트랙 ③ — 카드별 감독 디렉션 누적 버퍼.
+  // 다음 청크 생성 직전에 읽고 비운다. transcript 끝 "[감독의 디렉션]" 블록으로 주입.
+  const pendingDirectionsRef = useRef<DirectionAction[]>([]);
+
   useEffect(() => {
     if (phase !== 'generating') return;
     if (!session || !hasAnyKey) return;
@@ -243,9 +254,19 @@ export function useDebate(sessionId: string): UseDebateReturn {
         // ⑤-1f-B — 대기 메모가 있으면 transcript 끝에 시그널로 주입 (한 번만).
         const memo = pendingMemoRef.current;
         pendingMemoRef.current = null;
-        const transcript = memo
-          ? `${baseTranscript}\n[사용자 메모 — 패널에게 주는 시그널 (발언 아님, 방향만 참고)]\n${memo}`
-          : baseTranscript;
+        const memoBlock = memo
+          ? `\n[사용자 메모 — 패널에게 주는 시그널 (발언 아님, 방향만 참고)]\n${memo}`
+          : '';
+
+        // 트랙 ③ — 누적된 디렉션을 transcript 끝 시스템 지시로 주입 (한 번만).
+        const directions = pendingDirectionsRef.current;
+        pendingDirectionsRef.current = [];
+        const directionBlock =
+          directions.length > 0
+            ? `\n[감독의 디렉션 — 다음 장면에 반영]\n${directions.map((a) => formatDirection(a, cast)).join('\n')}`
+            : '';
+
+        const transcript = baseTranscript + memoBlock + directionBlock;
 
         const panel = cast.map((c) => ({
           name: c.name,
@@ -591,6 +612,18 @@ export function useDebate(sessionId: string): UseDebateReturn {
     [appendMessage, sessionId],
   );
 
+  /**
+   * 트랙 ③ — 카드별 감독 디렉션.
+   * pendingDirectionsRef 에 누적. 다음 청크 생성 시 transcript 주입 후 비워짐.
+   */
+  const submitDirection = useCallback(
+    (action: DirectionAction) => {
+      pendingDirectionsRef.current = [...pendingDirectionsRef.current, action];
+      toast.success(getDirectionLabel(action, cast));
+    },
+    [cast],
+  );
+
   // ───────────────────────────── ⑤-2a 스테이지 파생 값
   /** playing 중 가장 최근 reveal 된 turn 의 speakerId. */
   const activeSpeakerId = useMemo<string | null>(() => {
@@ -632,6 +665,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
       submitCustomTopic,
       conclude,
       submitWaitingMemo,
+      submitDirection,
     },
   };
 }
