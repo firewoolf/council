@@ -17,37 +17,81 @@ import type { Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
 /**
- * 결론 schema — generateObject 출력 강제.
- * 4섹션: 핵심 결론 / 주요 리스크 / 페르소나별 입장 / 추천 액션.
+ * 트랙 ② — 결정 지도 갈림 지점.
+ * 패널이 끝내 합의하지 못한 핵심 분기. 각 입장마다 어느 멤버인지 명시.
+ */
+export interface DividedPoint {
+  /** 갈린 지점의 주제 한 줄 */
+  topic: string;
+  /** 각 입장 — 어느 멤버가 어느 쪽인지 */
+  positions: { side: string; memberIds: string[] }[];
+}
+
+/**
+ * 결론 통합 타입.
  *
- * Phase B-2 §5.8 — personaId enum 해제. generated/custom 멤버 id 가 uuid 라
- * z.enum 강제는 LLM 출력을 깬다. summary 화면이 session cast 에서 id 로 조회한다.
+ * v1 (옛 4섹션) — 기존 세션 호환을 위해 옵셔널 유지.
+ * v2 (트랙 ② 결정 지도) — consensus / divided / openQuestions.
+ *
+ * 판별 규칙: `conclusion.consensus !== undefined` → v2, 아니면 v1.
+ */
+export interface Conclusion {
+  // ── v1 (옛 4섹션 — 기존 세션 호환) ──────────────────────────────────
+  keyConclusion?: string;
+  risks?: string[];
+  personaPositions?: { personaId: string; position: string }[];
+  recommendedActions?: string[];
+  // ── v2 (트랙 ②: 결정 지도) ──────────────────────────────────────────
+  consensus?: string[];
+  divided?: DividedPoint[];
+  openQuestions?: string[];
+}
+
+/**
+ * 결론 schema — v2 결정 지도 전용. generateObject 출력 강제.
+ *
+ * 트랙 ② §4-B (워크오더 박제):
+ *   consensus:     패널 공통 합의 사실 (2~6개)
+ *   divided:       패널이 끝내 못 합의한 핵심 분기 (1~4개) ★ 가장 값짐
+ *   openQuestions: 사용자에게 되돌린 분기 조건 질문 (2~4개)
+ *
+ * z.infer 결과({ consensus: string[], ... })는 Conclusion 인터페이스에
+ * 그대로 assignable — v2 필드가 required 여도 optional 을 만족한다.
  */
 export const conclusionSchema = z.object({
-  keyConclusion: z
-    .string()
-    .describe('핵심 결론 — 3문장 이내, 사용자가 가져갈 단 하나의 메시지'),
-  risks: z
+  consensus: z
     .array(z.string())
-    .length(3)
-    .describe('이 결정을 따를 때 가장 큰 리스크 3가지'),
-  personaPositions: z
+    .min(2)
+    .max(6)
+    .describe('패널이 *공통적으로* 짚은 사실·제약. 사용자가 전제로 깔아도 안전한 것.'),
+  divided: z
     .array(
       z.object({
-        personaId: z
-          .string()
-          .describe('CastMember id — archetype id 또는 generated/custom uuid'),
-        position: z.string().describe('이 페르소나의 최종 입장 — 한 줄'),
+        topic: z.string().describe('갈린 지점 한 줄. *합의된 척 포장 금지*.'),
+        positions: z
+          .array(
+            z.object({
+              side: z.string().describe('이 쪽 입장 한 줄'),
+              memberIds: z.array(z.string()).describe('이 입장의 멤버 id 들'),
+            }),
+          )
+          .min(2)
+          .max(4)
+          .describe('각 갈린 지점은 최소 2개 입장으로 분리. 합의로 위장 금지.'),
       }),
     )
-    .describe('각 참여 페르소나의 최종 입장 (사회자 제외 가능)'),
-  recommendedActions: z
+    .min(1)
+    .max(4)
+    .describe(
+      '★ 가장 값진 영역. 패널이 끝내 못 합의한 핵심 분기. ' +
+        '강제 수렴 금지 — 갈렸으면 갈렸다고 박제. 사용자가 직접 결정할 재료.',
+    ),
+  openQuestions: z
     .array(z.string())
-    .length(3)
-    .describe('지금 당장 / 1주 안 / 1달 안 단위의 구체적 액션 3가지'),
+    .min(2)
+    .max(4)
+    .describe('패널이 사용자에게 되돌린 질문. 답에 따라 결론이 바뀌는 분기 조건.'),
 });
-
-export type Conclusion = z.infer<typeof conclusionSchema>;
 
 /**
  * 트랙 ⑤-1 부록 B — 청크 시스템 프롬프트.
@@ -175,7 +219,12 @@ nextTopics 가 4개 일 때 그중 1개는 반드시 *사용자가 생각도 못
 `;
 }
 
-/** 사회자 정리 모드용 별도 프롬프트 트리거. */
+/**
+ * 트랙 ② — 결정 지도형 결론 프롬프트.
+ *
+ * ⚠️ Opus 박제 — 부록 A 원문 그대로. Sonnet 임의 수정 금지.
+ * 굴복 금지·강제 수렴 금지 가드가 본문 안에 포함돼 있다.
+ */
 export function buildConclusionPrompt(
   concern: string,
   messages: readonly Message[],
@@ -186,26 +235,58 @@ export function buildConclusionPrompt(
     .map((m) => {
       if (m.speakerId === null) return `[사용자] ${m.content}`;
       const persona = personaMap[m.speakerId];
-      return `[${persona?.name ?? '???'}] ${m.content}`;
+      return `[${persona?.name ?? '???'} (id:${m.speakerId})] ${m.content}`;
     })
+    .join('\n');
+
+  // 멤버 id ↔ 이름 매핑을 명시 — divided.positions.memberIds 가 정확한 id 를 채우도록.
+  const memberDirectory = cast
+    .map((m) => `- id: "${m.id}" / 이름: "${m.name}"`)
     .join('\n');
 
   return `[원본 고민]
 ${concern}
 
+[패널 명단 — divided.positions.memberIds 는 반드시 아래 id 사용]
+${memberDirectory}
+
 [전체 토론 내용]
 ${fullHistory}
 
-[작업]
-사회자로서 이 토론을 정리합니다. 다음 구조로 결론을 작성하세요:
+[작업 — 결정 지도형 결론]
+당신은 사회자입니다. 이 토론을 정리하되, *판결* 이 아니라 *결정 지도* 를 만듭니다.
+사용자가 직접 결정할 수 있도록 *재료* 를 분류해 제시하세요.
 
-1. 핵심 결론 (3문장 이내)
-2. 주요 리스크 3가지
-3. 페르소나별 최종 입장 한 줄 요약
-4. 추천 액션 3가지 (지금 당장 / 1주 안 / 1달 안 단위로, 구체적으로)
+세 가지 분류:
 
-원론·일반론 금지. "신중히 검토하세요" 같은 말은 결론이 아닙니다.
-사용자가 이 고민에 대해서만 할 수 있는, 구체적이고 단호한 문장으로 쓰십시오.
-페르소나들이 실제로 충돌한 지점을 숨기지 말고 결론에 드러내십시오.
+(1) consensus — *합의된 것*
+   패널이 공통적으로 짚은 사실·제약. 누구도 반박하지 않은 지점.
+   사용자가 *전제로 깔아도 안전한 것*.
+   2~6개. 한 줄씩.
+
+(2) divided — *끝내 갈린 것* ★ 가장 값진 영역
+   패널이 마지막까지 못 합의한 핵심 분기.
+   각 분기점마다 *어느 멤버가 어느 쪽인지* memberIds 로 명시.
+   1~4개. *합의된 척 포장 금지* — 갈렸으면 갈렸다고 박제.
+   각 분기점은 최소 2개 입장으로 분리. 입장 1개만 있으면 갈림이 아님.
+
+   예시 형식:
+   {
+     topic: "수의사 친구 1명을 자산으로 볼까 부채로 볼까",
+     positions: [
+       { side: "현장 검증 채널 (자산)", memberIds: ["domain-vet"] },
+       { side: "1명은 표본이 아닌 친밀감 함정", memberIds: ["jobs-designer", "realist"] }
+     ]
+   }
+
+(3) openQuestions — *당신이 답해야 할 질문*
+   패널이 사용자에게 되돌린 질문. 답에 따라 결론이 바뀌는 *분기 조건*.
+   2~4개. 교과서적 일반론 금지 — *이 고민에만 들어맞는* 질문.
+
+[금지 사항]
+- 강제 수렴 금지. divided 가 0개면 안 된다. 갈린 지점이 *반드시 있다*.
+- 일반론 금지. "신중히 검토하라" 식 결론은 결론이 아니다.
+- 굴복 금지. 사용자에게 맞춰주는 안전 모드 절대 금물.
+- 입장 1개 의 divided 금지. 갈렸으면 양쪽 모두 박제.
 `;
 }

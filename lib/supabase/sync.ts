@@ -76,12 +76,13 @@ export async function pushConclusion(
   sessionId: string,
   conclusion: Conclusion,
 ): Promise<void> {
+  // v1 결론 필드만 Supabase 에 동기화. v2(결정 지도) 는 Supabase schema 미지원 — 스킵.
   const { error } = await sb.from('conclusions').upsert({
     session_id: sessionId,
-    key_conclusion: conclusion.keyConclusion,
-    risks: conclusion.risks,
-    persona_positions: conclusion.personaPositions,
-    recommended_actions: conclusion.recommendedActions,
+    key_conclusion: conclusion.keyConclusion ?? '',
+    risks: conclusion.risks ?? [],
+    persona_positions: conclusion.personaPositions ?? [],
+    recommended_actions: conclusion.recommendedActions ?? [],
   });
   if (error) throw new Error(`conclusion upsert 실패: ${error.message}`);
 
