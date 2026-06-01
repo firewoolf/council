@@ -49,7 +49,17 @@ ChatGPT 의 다인 페르소나가 아닌 *NPC* 로 느끼게 해야.
 **부록 A·B·C 본문 Opus 박제 완료** — signatureLine 10명·keypoint-pulse CSS·
 DOMAIN_STAGE_BG 매핑.
 
-### 트랙 ② 결정 지도형 결론 — 1순위
+### 트랙 ⑤-5e 모두 발언 인트로 + Reveal 쿨타임 — 1순위
+워크오더 `docs/workorder-debate-5-5e-intro-statement.md` (Opus, 2026-05-31).
+**진단:** "첫 청크" 라는 표현 어색 + generating 화면이 *비어있음*. 사용자 피드백.
+**해결:** "토론 준비중" 라벨 (출하 완료) + 사회자가 concern 을 재진술한 *모두 발언*
+을 즉시 카드로 표시 (템플릿 기반, LLM 호출 0) + readingTime 튜닝 (150→180ms/char,
+min 1200ms) + 청크간 쿨타임 1.5초.
+**부록 A `generateIntroStatement` 본문 Opus 박제** — '직답을 주는 게 아니라' 굴복
+금지 톤 내장.
+출하 단위 2개 (한 PR 가능): ⑤-5e-A 모두 발언 + ⑤-5e-B reveal 튜닝.
+
+### 트랙 ② 결정 지도형 결론 — 출하 완료 (검수 통과 2026-05-31)
 워크오더 `docs/workorder-debate-2-decision-map.md` (Opus, 2026-05-31).
 **진단:** 현재 4섹션 *판결문* 결론 = AI 가 정답 내려줌 → ChatGPT 와 결과물 차별 없음.
 강제 수렴이 인사이트를 죽임.
