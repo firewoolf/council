@@ -61,7 +61,8 @@ export async function pushMessage(sb: SB, message: Message): Promise<void> {
     id: message.id,
     session_id: message.sessionId,
     speaker_id: message.speakerId,
-    kind: message.kind ?? 'speech',
+    // ⑤-5e — 'intro' 는 Supabase schema 미지원. 'speech' 로 fallback (프론트 전용 장식).
+    kind: (message.kind === 'intro' ? 'speech' : message.kind) ?? 'speech',
     content: message.content,
     reply_to: message.replyTo ?? null,
     is_question: message.isQuestion ?? false,

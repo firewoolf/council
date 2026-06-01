@@ -10,6 +10,7 @@ import { PROVIDERS } from '@/lib/ai/providers';
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
 import { formatDirection, getDirectionLabel } from '@/lib/prompts/directions';
+import { generateIntroStatement } from '@/lib/prompts/intro';
 import { readingTime } from '@/lib/utils';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
@@ -103,7 +104,9 @@ interface UseDebateReturn {
 }
 
 const FIRST_GENERATING_DELAY_MS = 150;
-const PHASE_TRANSITION_TAIL_MS = 600; // 마지막 턴 드러난 후 steering 으로 넘어가기 전 여유
+// ⑤-5e — 청크 끝 → steering 진입 최소 대기 (마지막 발언 음미).
+// PHASE_TRANSITION_TAIL_MS (옛 600ms) 를 대체.
+const INTER_CHUNK_COOLDOWN_MS = 1500;
 const EMPTY_CAST: readonly CastMember[] = Object.freeze([]);
 
 function generateId(): string {
@@ -415,10 +418,10 @@ export function useDebate(sessionId: string): UseDebateReturn {
     if (!currentChunk) return;
 
     if (revealedTurnCount >= currentChunkTurns.length) {
-      // 한 청크 다 드러남 → 약간의 여유 후 steering
+      // 한 청크 다 드러남 → 여유 후 steering (⑤-5e: 1500ms 로 충분히 확보)
       const handle = setTimeout(() => {
         setPhase('steering');
-      }, PHASE_TRANSITION_TAIL_MS);
+      }, INTER_CHUNK_COOLDOWN_MS);
       return () => clearTimeout(handle);
     }
 
@@ -541,9 +544,25 @@ export function useDebate(sessionId: string): UseDebateReturn {
   // ───────────────────────────── 액션
   const start = useCallback(() => {
     setError(null);
+
+    // ⑤-5e — 사회자 모두 발언을 즉시 메시지로 추가 (generating 전 단계, LLM 호출 없음).
+    // facilitator 가 없는 cast 는 throw 없이 스킵 (안전 가드).
+    const facilitator = cast.find((c) => c.isFacilitator) ?? null;
+    if (facilitator && session) {
+      const introText = generateIntroStatement(session.concern, facilitator);
+      appendMessage(sessionId, {
+        id: generateId(),
+        sessionId,
+        speakerId: facilitator.id,
+        content: introText,
+        createdAt: new Date().toISOString(),
+        kind: 'intro',
+      });
+    }
+
     pendingTopicRef.current = { topic: '_first', isFirst: true };
     setPhase('generating');
-  }, []);
+  }, [cast, session, sessionId, appendMessage]);
 
   const play = useCallback(() => setIsPaused(false), []);
   const pause = useCallback(() => setIsPaused(true), []);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CornerDownRight, HelpCircle, Megaphone, MoreHorizontal, Sparkles, User } from 'lucide-react';
+import { CornerDownRight, Flag, HelpCircle, Megaphone, MoreHorizontal, Sparkles, User } from 'lucide-react';
 
 import { DirectionMenu } from './DirectionMenu';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
@@ -60,8 +60,9 @@ export function MessageCard({
 
   const isUser = speaker === null;
   const isInstruction = message.kind === 'instruction';
-  // ⋯ 버튼 노출 조건: 페르소나 발언 + onDirect 제공됨
-  const canDirect = !isUser && !isInstruction && !!onDirect && !!cast;
+  const isIntro = message.kind === 'intro';
+  // ⋯ 버튼 노출 조건: 페르소나 발언 + onDirect 제공됨 (intro 제외)
+  const canDirect = !isUser && !isInstruction && !isIntro && !!onDirect && !!cast;
 
   // 사용자 메타 지시 — 중앙 정렬 + 다른 톤. 토론과 별개 채널임을 시각적으로 분리.
   if (isInstruction) {
@@ -99,8 +100,8 @@ export function MessageCard({
     return null;
   }
 
-  // 트랙 ⑤-2a — 좌측 색띠 두께: 기본 6px, isKeyPoint 8px
-  const borderLeftWidth = message.isKeyPoint ? 8 : 6;
+  // 트랙 ⑤-2a — 좌측 색띠 두께: 기본 6px, isKeyPoint 8px, intro 10px (시작의 무게)
+  const borderLeftWidth = message.isKeyPoint ? 8 : isIntro ? 10 : 6;
 
   // ⑤-5a — archetype 출신만 시그니처 표시 (generated/custom 은 없음)
   const signature =
@@ -182,6 +183,13 @@ export function MessageCard({
         >
           {LENS_LABEL_KR[speaker.trait.lens]}
         </span>
+        {/* ⑤-5e — 모두 발언 마커 */}
+        {isIntro && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+            <Flag className="size-3" />
+            모두 발언
+          </span>
+        )}
         {/* ⑤-5a — isKeyPoint 핵심 발언 마커 (Persona 5 Aha 모먼트) */}
         {message.isKeyPoint && (
           <span

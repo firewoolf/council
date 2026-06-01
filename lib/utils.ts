@@ -15,10 +15,13 @@ export function cn(...inputs: ClassValue[]) {
  * 짧은 발언은 너무 빨리 사라지지 않게 최소 800ms, 긴 발언도 끊김 없이
  * 다음 턴이 이어지도록 최대 6000ms 로 클램프.
  *
+ * ⑤-5e 튜닝 (2026-06-01): ms/char 150 → 180, min 800 → 1200.
+ * 한국어 평균 읽기 속도 더 여유있게 + 짧은 발언도 최소 1.2초 보장.
+ *
  * 재생 엔진은 이 값을 speed(1x/2x) 로 나눠 setTimeout 딜레이로 쓴다.
  */
 export function readingTime(content: string): number {
   const len = content.trim().length;
-  const ms = len * 150;
-  return Math.max(800, Math.min(6000, ms));
+  const ms = len * 180;
+  return Math.max(1200, Math.min(6000, ms));
 }

@@ -28,8 +28,10 @@ export interface Session {
  *   - speech: 일반 발언 (페르소나 또는 사용자)
  *   - instruction: 사용자의 메타 지시 ("더 짧게", "다른 시각으로"). speakerId는 null.
  *     이후 모든 페르소나 발언이 이 지시를 반영해야 한다.
+ *   - intro: ⑤-5e — 사회자 모두 발언. 토론 시작 시 즉시 표시. LLM 호출 없음.
+ *     undefined / 'speech' 는 모두 일반 발언으로 렌더 (마이그레이션 무중단).
  */
-export type MessageKind = 'speech' | 'instruction';
+export type MessageKind = 'speech' | 'instruction' | 'intro';
 
 export interface Message {
   id: string;
