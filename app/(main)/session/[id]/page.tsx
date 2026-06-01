@@ -225,9 +225,9 @@ export default function SessionRoomPage() {
         onDirect={actions.submitDirection}
         emptyHint={
           phase === 'idle'
-            ? '"토론 시작"을 누르면 첫 청크가 생성됩니다.'
+            ? '"토론 시작"을 누르면 패널이 모입니다.'
             : phase === 'generating'
-              ? '첫 청크를 만드는 중입니다.'
+              ? '토론 준비중 — 패널이 첫 발언을 준비하고 있습니다.'
               : undefined
         }
       />

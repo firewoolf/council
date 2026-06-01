@@ -26,7 +26,7 @@ interface DebateControlsProps {
  *
  * phase 별 노출:
  *   - idle       : "토론 시작"
- *   - generating : 로딩 ("다음 장면 준비 중")
+ *   - generating : 로딩 ("토론 준비중")
  *   - playing    : 재생/일시정지 + 속도(1x/2x) + 탭(다음 턴)
  *   - steering   : SteeringPanel 이 본 컨트롤을 대체 — 여긴 안내 한 줄.
  *   - concluding : 로딩
@@ -74,7 +74,7 @@ export function DebateControls({
       <Bar>
         <span className="flex flex-1 items-center gap-2 font-mono text-xs text-text-muted">
           <Loader2 className="size-3.5 animate-spin text-primary" />
-          다음 장면 준비 중
+          토론 준비중
         </span>
       </Bar>
     );
