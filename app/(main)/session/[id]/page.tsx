@@ -11,6 +11,8 @@ import {
   ChevronUp,
   Flag,
   Trash2,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 import { DebateControls } from '@/components/debate/DebateControls';
@@ -22,6 +24,7 @@ import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { useDebate } from '@/hooks/useDebate';
 import { useHasMounted } from '@/hooks/useHasMounted';
+import { isMuted, setMuted } from '@/lib/sound';
 import { useSessionsStore } from '@/store/sessions';
 import { cn } from '@/lib/utils';
 
@@ -60,6 +63,8 @@ export default function SessionRoomPage() {
     actions,
   } = useDebate(id);
   const [headerOpen, setHeaderOpen] = useState(false);
+  // ⑤-5f-B — mute 토글 상태 (localStorage 에서 초기화, setMuted 와 동기화)
+  const [soundMuted, setSoundMuted] = useState(() => isMuted());
   // 트랙 ⑤-2b — PersonaDetailDrawer 열림 대상
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
@@ -98,13 +103,33 @@ export default function SessionRoomPage() {
       className="flex flex-col gap-4 pb-32 pt-2"
       style={{ backgroundImage: 'var(--stage-bg)' }}
     >
-      <Link
-        href="/"
-        className="inline-flex w-fit items-center gap-1 text-xs text-text-muted hover:text-text"
-      >
-        <ArrowLeft className="size-3.5" />
-        홈으로
-      </Link>
+      {/* 상단 행 — 홈 링크 + mute 토글 */}
+      <div className="flex items-center justify-between">
+        <Link
+          href="/"
+          className="inline-flex w-fit items-center gap-1 text-xs text-text-muted hover:text-text"
+        >
+          <ArrowLeft className="size-3.5" />
+          홈으로
+        </Link>
+        {/* ⑤-5f-B — 사운드 mute 토글 */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = !soundMuted;
+            setMuted(next);
+            setSoundMuted(next);
+          }}
+          aria-label={soundMuted ? '사운드 켜기' : '사운드 끄기'}
+          className="flex size-9 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
+        >
+          {soundMuted ? (
+            <VolumeX className="size-4" />
+          ) : (
+            <Volume2 className="size-4 text-text" />
+          )}
+        </button>
+      </div>
 
       {/* 헤더 — 접힘 */}
       <header className="overflow-hidden rounded-xl border border-border bg-surface">

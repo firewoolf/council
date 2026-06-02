@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { playSound } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 import type { ChunkMeta } from '@/types/debate';
 
@@ -44,6 +45,8 @@ export function SteeringPanel({
       toast.error('소주제가 너무 짧습니다.');
       return;
     }
+    // ⑤-5f-B — 갈림길 선택 사운드
+    playSound('steering-decide');
     onCustom(trimmed);
     setCustom('');
     setCustomOpen(false);
@@ -63,7 +66,11 @@ export function SteeringPanel({
           <li key={`${i}-${t.label}`}>
             <button
               type="button"
-              onClick={() => onChoose(t.label, t.hook)}
+              onClick={() => {
+                  // ⑤-5f-B — 갈림길 선택 사운드
+                  playSound('steering-decide');
+                  onChoose(t.label, t.hook);
+                }}
               className={cn(
                 'flex w-full flex-col gap-1 rounded-lg border p-3 text-left transition-colors',
                 t.isBlindSpot

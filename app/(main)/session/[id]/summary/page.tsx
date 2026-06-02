@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { useHasMounted } from '@/hooks/useHasMounted';
+import { playSound } from '@/lib/sound';
 import { useSessionsStore } from '@/store/sessions';
 import type { Conclusion, DividedPoint } from '@/lib/prompts/orchestrator';
 import type { CastMember } from '@/types/persona';
@@ -58,6 +59,12 @@ export default function SessionSummaryPage() {
       router.replace(`/session/${id}`);
     }
   }, [mounted, session, conclusion, id, router]);
+
+  // ⑤-5f-B — summary 화면 진입 fanfare (마운트 1회)
+  useEffect(() => {
+    if (!mounted || !conclusion) return;
+    playSound('conclude');
+  }, [mounted, conclusion]);
 
   if (!mounted || !session || !conclusion) {
     return <div className="min-h-[60vh]" aria-hidden />;
