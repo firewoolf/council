@@ -11,6 +11,8 @@ import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
 import { formatDirection, getDirectionLabel } from '@/lib/prompts/directions';
 import { generateIntroStatement } from '@/lib/prompts/intro';
+import { playSound } from '@/lib/sound';
+import type { SoundEvent } from '@/lib/sound';
 import { readingTime } from '@/lib/utils';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
@@ -108,6 +110,14 @@ const FIRST_GENERATING_DELAY_MS = 150;
 // PHASE_TRANSITION_TAIL_MS (옛 600ms) 를 대체.
 const INTER_CHUNK_COOLDOWN_MS = 1500;
 const EMPTY_CAST: readonly CastMember[] = Object.freeze([]);
+
+/** ⑤-5f-B — 발언 메시지의 사운드 이벤트 우선순위 결정. */
+function soundFor(msg: Message): SoundEvent {
+  if (msg.kind === 'intro') return 'intro';
+  if (msg.isKeyPoint) return 'keypoint';
+  if (msg.isQuestion) return 'question';
+  return 'reveal';
+}
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -430,6 +440,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
 
     const delay = readingTime(nextTurn.content) / speed;
     const handle = setTimeout(() => {
+      // ⑤-5f-B — 발언 카드 등장 사운드 (우선순위: keypoint > question > intro > reveal)
+      playSound(soundFor(nextTurn));
       setRevealedTurnCount((c) => c + 1);
     }, delay);
 
@@ -558,6 +570,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
         createdAt: new Date().toISOString(),
         kind: 'intro',
       });
+      // ⑤-5f-B — 모두 발언 등장 사운드
+      playSound('intro');
     }
 
     pendingTopicRef.current = { topic: '_first', isFirst: true };

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Flame, Hash, HelpCircle, RotateCcw, Swords } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
+import { playSound } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 import type { DirectionAction, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -63,10 +64,14 @@ export function DirectionMenu({
   }, [onClose]);
 
   function handleSimple(kind: 'tighten' | 'specify' | 'reframe' | 'ask-user') {
+    // ⑤-5f-B — 디렉션 전송 사운드
+    playSound('direction-send');
     onSubmit({ kind, targetMemberId: speaker.id, targetMessageId: message.id });
   }
 
   function handleRebut(byMemberId: string) {
+    // ⑤-5f-B — 디렉션 전송 사운드
+    playSound('direction-send');
     onSubmit({
       kind: 'rebut',
       targetMemberId: speaker.id,
