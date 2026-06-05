@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { CornerDownRight, X } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
@@ -63,6 +63,15 @@ export function PersonaDetailDrawer({
     };
   }, [open]);
 
+  // ⑤-5f-A — 반신 일러스트 (archetype 출신만, 자산 없으면 orb 유지)
+  const [portraitLoaded, setPortraitLoaded] = useState(false);
+  const [portraitErrored, setPortraitErrored] = useState(false);
+  const portraitPath = member.archetypeId
+    ? `/personas/portraits/${member.archetypeId}.webp`
+    : undefined;
+  // showPortrait: 경로가 있고 아직 오류 없음
+  const showPortrait = !!(portraitPath && !portraitErrored);
+
   const messageById = useMemo(() => {
     const m = new Map<string, Message>();
     for (const msg of allMessages) m.set(msg.id, msg);
@@ -111,15 +120,69 @@ export function PersonaDetailDrawer({
           <div className="h-1 w-10 rounded-full bg-border" />
         </div>
 
-        {/* 헤더 */}
+        {/* ⑤-5f-A — 반신 일러스트 카드 (이미지 자산 있을 때) */}
+        {portraitPath && (
+          <div
+            className="relative aspect-square w-full shrink-0 overflow-hidden"
+            style={{
+              // 로딩 중 + 오류 시 페르소나 색 그라디언트가 자리 표시
+              background: `linear-gradient(160deg, ${member.colorFrom}, ${member.colorTo})`,
+              // 오류 시 섹션 자체를 접음
+              display: portraitErrored ? 'none' : undefined,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={portraitPath}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              onLoad={() => setPortraitLoaded(true)}
+              onError={() => setPortraitErrored(true)}
+              className={cn(
+                'size-full object-cover transition-opacity duration-500',
+                // fix ⓐ: 반신 일러스트 얼굴이 상단 1/3 — center top 정렬
+                portraitLoaded ? 'opacity-100' : 'opacity-0',
+              )}
+              style={{ objectPosition: '50% 20%' }}
+            />
+
+            {/* 하단 그라디언트 오버레이 + 이름/역할 */}
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+              <p className="text-xl font-bold text-white drop-shadow">{member.name}</p>
+              <p className="mt-0.5 text-sm text-white/80 drop-shadow">{member.role}</p>
+            </div>
+
+            {/* 닫기 버튼 — 이미지 모드에서 우상단 */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              aria-label="닫기"
+              className="absolute right-2 top-2 text-white/70 hover:bg-black/30 hover:text-white"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        )}
+
+        {/* 헤더 — 이미지 없으면 orb 포함, 이미지 있으면 trait 칩만 */}
         <div className="flex shrink-0 items-start gap-4 border-b border-border px-5 pb-4 pt-3 sm:pt-5">
-          <PersonaOrb persona={member} size={64} glow="soft" className="shrink-0" />
+          {/* orb: 이미지 자산 없을 때만 표시 (이미지가 시각 정체성 담당) */}
+          {!showPortrait && (
+            <PersonaOrb persona={member} size={64} glow="soft" className="shrink-0" />
+          )}
           <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold text-text">{member.name}</p>
-            <p className="mt-0.5 text-xs leading-relaxed text-text-muted">
-              {member.role}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            {/* 이미지 없을 때만 이름/역할 표시 (이미지 오버레이가 담당) */}
+            {!showPortrait && (
+              <>
+                <p className="text-base font-semibold text-text">{member.name}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-text-muted">
+                  {member.role}
+                </p>
+              </>
+            )}
+            <div className={cn('flex flex-wrap items-center gap-2', !showPortrait && 'mt-2')}>
               <span
                 className="inline-block rounded-full px-2 py-0.5 text-[10px] font-medium leading-none"
                 style={{
@@ -136,15 +199,18 @@ export function PersonaDetailDrawer({
               )}
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-            className="shrink-0"
-            aria-label="닫기"
-          >
-            <X className="size-4" />
-          </Button>
+          {/* 닫기 버튼: 이미지 없을 때만 (이미지 모드에서는 portrait 오버레이가 담당) */}
+          {!showPortrait && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="shrink-0"
+              aria-label="닫기"
+            >
+              <X className="size-4" />
+            </Button>
+          )}
         </div>
 
         {/* 발언 수 바 */}
