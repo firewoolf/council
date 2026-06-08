@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { CornerDownRight, X } from 'lucide-react';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
+import { StatGauge } from '@/components/persona/StatGauge';
 import { Button } from '@/components/ui/button';
-import { LENS_LABEL_KR } from '@/lib/prompts/personas';
+import { LENS_LABEL_KR, statsForMember } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 import type { ChunkMeta, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -211,6 +212,24 @@ export function PersonaDetailDrawer({
               <X className="size-4" />
             </Button>
           )}
+        </div>
+
+        {/* ⑤-5a-2 — 능력치 패널 */}
+        <div className="shrink-0 border-b border-border/50 px-5 py-3">
+          <p className="mb-2 font-mono text-[10px] uppercase tracking-normal text-text-muted/60">
+            능력치
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {statsForMember(member).map((s) => (
+              <StatGauge
+                key={s.label}
+                label={s.label}
+                score={s.score}
+                size="md"
+                color={member.colorTo}
+              />
+            ))}
+          </div>
         </div>
 
         {/* 발언 수 바 */}

@@ -76,6 +76,64 @@ export const SIGNATURE_LINES: Record<string, string> = {
   'facilitator':         '우리가 *진짜로* 풀어야 할 질문이 뭡니까?',
 };
 
+/** ⑤-5a-2 — trait 값 → 능력치 라벨 매핑. */
+export const STANCE_STAT_LABEL: Record<StanceAxis, string> = {
+  advocate: '추진력',
+  critic:   '비판력',
+  agnostic: '통찰력',
+};
+export const LENS_STAT_LABEL: Record<Lens, string> = {
+  analyst:    '분석력',
+  empath:     '공감력',
+  pragmatist: '실전력',
+};
+export const EXPRESSION_STAT_LABEL: Record<Expression, string> = {
+  provocateur: '도발력',
+  measured:    '조정력',
+};
+
+/** 능력치 점수 1~5. 표시 전용 — 프롬프트 합성에 쓰지 않는다. */
+export type StatScore = 1 | 2 | 3 | 4 | 5;
+export interface StatTriple {
+  stanceAxis: StatScore;
+  lens: StatScore;
+  expression: StatScore;
+}
+
+/**
+ * ⑤-5a-2 — archetype별 능력치 점수표 (Opus 박제, 부록 A).
+ * 키는 trait *축*. 라벨은 그 멤버의 trait *값* 으로 런타임 해석.
+ * generated/custom(여기 없는 멤버)은 DEFAULT_STAT 폴백.
+ */
+export const STAT_SCORES: Record<string, StatTriple> = {
+  'cold-investor':       { stanceAxis: 5, lens: 5, expression: 3 },
+  'cynical-dev':         { stanceAxis: 5, lens: 4, expression: 5 },
+  'jobs-designer':       { stanceAxis: 5, lens: 3, expression: 5 },
+  'realist':             { stanceAxis: 4, lens: 5, expression: 3 },
+  'startup-expert':      { stanceAxis: 4, lens: 5, expression: 4 },
+  'branding-strategist': { stanceAxis: 4, lens: 5, expression: 3 },
+  'psychologist':        { stanceAxis: 4, lens: 5, expression: 4 },
+  'growth-marketer':     { stanceAxis: 5, lens: 4, expression: 3 },
+  'domain-expert':       { stanceAxis: 3, lens: 5, expression: 4 },
+  'facilitator':         { stanceAxis: 4, lens: 3, expression: 5 },
+};
+
+/** generated/custom 폴백 — 정의 trait(stance)만 약간 높게. */
+const DEFAULT_STAT: StatTriple = { stanceAxis: 4, lens: 3, expression: 3 };
+
+/** 한 멤버의 *표시용* 능력치 3개 — {라벨, 점수}. 카드·드로어 공용. */
+export function statsForMember(
+  member: Pick<CastMember, 'archetypeId' | 'trait'>,
+): { label: string; score: StatScore }[] {
+  const s =
+    (member.archetypeId && STAT_SCORES[member.archetypeId]) || DEFAULT_STAT;
+  return [
+    { label: STANCE_STAT_LABEL[member.trait.stanceAxis],   score: s.stanceAxis },
+    { label: LENS_STAT_LABEL[member.trait.lens],           score: s.lens },
+    { label: EXPRESSION_STAT_LABEL[member.trait.expression], score: s.expression },
+  ];
+}
+
 /** 10개 아키타입 전체 — JSON 순서 그대로. */
 export const PERSONAS: readonly Archetype[] =
   personasJson as readonly Archetype[];

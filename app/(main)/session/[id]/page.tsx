@@ -13,10 +13,13 @@ import {
   Trash2,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react';
 
+import { BackgroundPicker } from '@/components/debate/BackgroundPicker';
 import { DebateControls } from '@/components/debate/DebateControls';
 import { DebateFeed } from '@/components/debate/DebateFeed';
+import { DebateStage } from '@/components/debate/DebateStage';
 import { PersonaDetailDrawer } from '@/components/debate/PersonaDetailDrawer';
 import { SteeringPanel } from '@/components/debate/SteeringPanel';
 import { WaitingMemoArea } from '@/components/debate/WaitingMemoArea';
@@ -25,7 +28,10 @@ import { Button } from '@/components/ui/button';
 import { useDebate } from '@/hooks/useDebate';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { isMuted, setMuted } from '@/lib/sound';
+import { SIGNATURE_LINES } from '@/lib/prompts/personas';
+import { DEFAULT_BACKGROUND_ID } from '@/lib/stage/backgrounds';
 import { useSessionsStore } from '@/store/sessions';
+import { useStageStore } from '@/store/stage';
 import { cn } from '@/lib/utils';
 
 /**
@@ -67,6 +73,10 @@ export default function SessionRoomPage() {
   const [soundMuted, setSoundMuted] = useState(() => isMuted());
   // 트랙 ⑤-2b — PersonaDetailDrawer 열림 대상
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  // ⑤-5h — 배경 선택 + 대화록 토글
+  const backgroundId = useStageStore((s) => s.backgroundBySession[id]) ?? DEFAULT_BACKGROUND_ID;
+  const [bgPickerOpen, setBgPickerOpen] = useState(false);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   /** 드로어 대상 멤버 */
   const selectedMember = useMemo(
@@ -82,6 +92,23 @@ export default function SessionRoomPage() {
         : [],
     [selectedMemberId, revealedMessages],
   );
+
+  // ⑤-5h — 무대 화자/모드/대사 파생
+  const stageSpeaker =
+    activeSpeakerId ? (cast.find((c) => c.id === activeSpeakerId) ?? null)
+    : thinkingMemberId ? (cast.find((c) => c.id === thinkingMemberId) ?? null)
+    : null;
+  const stageMode: 'speaking' | 'thinking' | 'idle' =
+    activeSpeakerId ? 'speaking' : thinkingMemberId ? 'thinking' : 'idle';
+  const lastRevealed = revealedMessages[revealedMessages.length - 1] ?? null;
+  const stageLine =
+    stageMode === 'speaking' && lastRevealed && lastRevealed.speakerId === stageSpeaker?.id
+      ? lastRevealed.content : undefined;
+  const stageSig =
+    stageMode === 'speaking' && stageSpeaker?.source === 'archetype' && stageSpeaker.archetypeId
+      ? SIGNATURE_LINES[stageSpeaker.archetypeId] : undefined;
+
+  const stageActive = phase === 'generating' || phase === 'playing' || phase === 'steering';
 
   useEffect(() => {
     if (mounted && !session) {
@@ -239,36 +266,47 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* 피드 — revealedMessages 만 표시 (재생 진행 분) */}
-      <DebateFeed
-        messages={revealedMessages}
-        cast={cast}
-        chunks={chunks}
-        activeSpeakerId={activeSpeakerId}
-        thinkingMemberId={thinkingMemberId}
-        onSelectMember={setSelectedMemberId}
-        onDirect={actions.submitDirection}
-        emptyHint={
-          phase === 'idle'
-            ? '"토론 시작"을 누르면 패널이 모입니다.'
-            : phase === 'generating'
-              ? '토론 준비중 — 패널이 첫 발언을 준비하고 있습니다.'
+      {/* ⑤-5h — 재생 중: 무대 / 그 외: 피드 */}
+      {stageActive ? (
+        <>
+          <DebateStage
+            speaker={stageSpeaker}
+            mode={stageMode}
+            line={stageLine}
+            signatureLine={stageSig}
+            backgroundId={backgroundId}
+            onAdvance={actions.skipTurn}
+            onOpenBackground={() => setBgPickerOpen(true)}
+            onOpenTranscript={() => setTranscriptOpen(true)}
+          />
+          {/* ⑤-1f-B 대기 시간 메모 — generating 중에만 노출 */}
+          {phase === 'generating' && (
+            <WaitingMemoArea onSubmit={actions.submitWaitingMemo} />
+          )}
+          {/* 갈림길 패널 */}
+          {phase === 'steering' && currentChunk && (
+            <SteeringPanel
+              chunk={currentChunk}
+              onChoose={actions.chooseTopic}
+              onCustom={actions.submitCustomTopic}
+              onConclude={actions.conclude}
+            />
+          )}
+        </>
+      ) : (
+        <DebateFeed
+          messages={revealedMessages}
+          cast={cast}
+          chunks={chunks}
+          activeSpeakerId={activeSpeakerId}
+          thinkingMemberId={thinkingMemberId}
+          onSelectMember={setSelectedMemberId}
+          onDirect={actions.submitDirection}
+          emptyHint={
+            phase === 'idle'
+              ? '"토론 시작"을 누르면 패널이 모입니다.'
               : undefined
-        }
-      />
-
-      {/* ⑤-1f-B 대기 시간 메모 — generating 중에만 노출 */}
-      {phase === 'generating' && (
-        <WaitingMemoArea onSubmit={actions.submitWaitingMemo} />
-      )}
-
-      {/* 갈림길 패널 */}
-      {phase === 'steering' && currentChunk && (
-        <SteeringPanel
-          chunk={currentChunk}
-          onChoose={actions.chooseTopic}
-          onCustom={actions.submitCustomTopic}
-          onConclude={actions.conclude}
+          }
         />
       )}
 
@@ -283,6 +321,36 @@ export default function SessionRoomPage() {
         onPause={actions.pause}
         onSetSpeed={actions.setSpeed}
         onSkipTurn={actions.skipTurn}
+      />
+
+      {/* ⑤-5h — 대화록 오버레이 */}
+      {transcriptOpen && (
+        <div className="fixed inset-0 z-[35] flex flex-col bg-background">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <p className="text-sm font-semibold text-text">대화록</p>
+            <button onClick={() => setTranscriptOpen(false)} aria-label="닫기"
+              className="text-text-muted hover:text-text"><X className="size-4" /></button>
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            <DebateFeed
+              messages={revealedMessages}
+              cast={cast}
+              chunks={chunks}
+              activeSpeakerId={activeSpeakerId}
+              thinkingMemberId={thinkingMemberId}
+              onSelectMember={setSelectedMemberId}
+              onDirect={actions.submitDirection}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ⑤-5h — 배경 선택 시트 */}
+      <BackgroundPicker
+        sessionId={id}
+        currentId={backgroundId}
+        open={bgPickerOpen}
+        onClose={() => setBgPickerOpen(false)}
       />
 
       {/* 트랙 ⑤-2b — 페르소나 발언 필터 드로어 */}

@@ -4,8 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import { MoreHorizontal, Plus, Trash2, Replace } from 'lucide-react';
 
 import { PersonaOrb } from './PersonaOrb';
+import { StatGauge } from './StatGauge';
 import { cn } from '@/lib/utils';
-import { STANCE_LABEL_KR, LENS_LABEL_KR, EXPRESSION_LABEL_KR } from '@/lib/prompts/personas';
+import {
+  STANCE_LABEL_KR,
+  LENS_LABEL_KR,
+  EXPRESSION_LABEL_KR,
+  statsForMember,
+} from '@/lib/prompts/personas';
 import type { CastMember, StanceAxis, Lens, Expression, Trait } from '@/types/persona';
 
 interface PersonaCardProps {
@@ -303,6 +309,17 @@ export function PersonaCard({
               }
             />
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {statsForMember(member).map((s) => (
+            <StatGauge
+              key={s.label}
+              label={s.label}
+              score={s.score}
+              color={member.colorTo}
+            />
+          ))}
         </div>
 
         <p className="line-clamp-1 text-xs text-text-muted">{member.role}</p>

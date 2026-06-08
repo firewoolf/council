@@ -5,6 +5,8 @@ import { ChevronDown } from 'lucide-react';
 
 import { MessageCard } from './MessageCard';
 import { PersonaStageStrip } from './PersonaStageStrip';
+import { SpeakerSpotlight } from './SpeakerSpotlight';
+import { SIGNATURE_LINES } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
 import type { ChunkMeta, DirectionAction, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -191,10 +193,41 @@ export function DebateFeed({
     />
   );
 
+  // 활성 화자: 발언 중 우선, 없으면 준비 중.
+  const spotlightSpeaker = activeSpeakerId
+    ? (castMap.get(activeSpeakerId) ?? null)
+    : thinkingMemberId
+      ? (castMap.get(thinkingMemberId) ?? null)
+      : null;
+
+  const spotlightMode: 'speaking' | 'thinking' | 'idle' = activeSpeakerId
+    ? 'speaking'
+    : thinkingMemberId
+      ? 'thinking'
+      : 'idle';
+
+  const spotlightSig =
+    spotlightMode === 'speaking' &&
+    spotlightSpeaker?.source === 'archetype' &&
+    spotlightSpeaker.archetypeId
+      ? SIGNATURE_LINES[spotlightSpeaker.archetypeId]
+      : undefined;
+
+  const stageHeader = (
+    <div className="sticky top-0 z-20 flex flex-col gap-2 bg-background/90 pb-2 backdrop-blur">
+      {stageStrip}
+      <SpeakerSpotlight
+        speaker={spotlightSpeaker}
+        mode={spotlightMode}
+        signatureLine={spotlightSig}
+      />
+    </div>
+  );
+
   if (messages.length === 0 && emptyHint) {
     return (
       <div className="flex flex-col gap-4">
-        {stageStrip}
+        {stageHeader}
         <div className="rounded-xl border border-dashed border-border bg-surface/40 p-8 text-center">
           <p className="text-sm leading-relaxed text-text-muted">{emptyHint}</p>
         </div>
@@ -204,7 +237,7 @@ export function DebateFeed({
 
   return (
     <div className="flex flex-col gap-6">
-      {stageStrip}
+      {stageHeader}
       {groups.map((g, idx) => (
         <section key={g.key} className="flex flex-col gap-3">
           {/* 청크 헤더 — 두 번째 그룹부터 표시 (첫 청크/플랫 그룹은 헤더 없이) */}
