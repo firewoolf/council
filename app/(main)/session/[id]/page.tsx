@@ -266,7 +266,7 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* ⑤-5h — 재생 중: 무대 / 그 외: 피드 */}
+      {/* ⑤-5h — 재생 중: 무대 + 대화록 / 그 외: 피드만 */}
       {stageActive ? (
         <>
           <DebateStage
@@ -292,25 +292,47 @@ export default function SessionRoomPage() {
               onConclude={actions.conclude}
             />
           )}
+          {/* 무대 아래 대화록 — 접을 수 있는 섹션 */}
+          {revealedMessages.length > 0 && (
+            <details className="group rounded-xl border border-border bg-surface overflow-hidden">
+              <summary className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-surface-2">
+                <span className="text-sm font-semibold text-text">대화 기록</span>
+                <ChevronDown className="size-4 text-text-muted transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-border bg-background/40 p-4">
+                <DebateFeed
+                  messages={revealedMessages}
+                  cast={cast}
+                  chunks={chunks}
+                  activeSpeakerId={activeSpeakerId}
+                  thinkingMemberId={thinkingMemberId}
+                  onSelectMember={setSelectedMemberId}
+                  onDirect={actions.submitDirection}
+                />
+              </div>
+            </details>
+          )}
         </>
       ) : (
-        <DebateFeed
-          messages={revealedMessages}
-          cast={cast}
-          chunks={chunks}
-          activeSpeakerId={activeSpeakerId}
-          thinkingMemberId={thinkingMemberId}
-          onSelectMember={setSelectedMemberId}
-          onDirect={actions.submitDirection}
-          emptyHint={
-            phase === 'idle'
-              ? '"토론 시작"을 누르면 패널이 모입니다.'
-              : undefined
-          }
-        />
+        <>
+          <DebateFeed
+            messages={revealedMessages}
+            cast={cast}
+            chunks={chunks}
+            activeSpeakerId={activeSpeakerId}
+            thinkingMemberId={thinkingMemberId}
+            onSelectMember={setSelectedMemberId}
+            onDirect={actions.submitDirection}
+            emptyHint={
+              phase === 'idle'
+                ? '"토론 시작"을 누르면 패널이 모입니다.'
+                : undefined
+            }
+          />
+        </>
       )}
 
-      {/* 재생 트랜스포트 (하단 sticky) */}
+      {/* 재생 트랜스포트 (하단 sticky) — 항상 표시 */}
       <DebateControls
         phase={phase}
         isPaused={isPaused}
