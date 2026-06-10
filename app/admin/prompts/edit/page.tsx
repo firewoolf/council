@@ -11,6 +11,7 @@ import {
   LENS_DIRECTIVES,
   EXPRESSION_DIRECTIVES,
 } from '@/lib/prompts/base';
+import { CHUNK_SYSTEM_PROMPT } from '@/lib/prompts/orchestrator';
 
 import { PromptsEditForm } from './PromptsEditForm';
 
@@ -55,6 +56,7 @@ export default function AdminPromptsEditPage() {
         initial={{
           basePrompt: BASE_PROMPT,
           outputHint: OUTPUT_HINT,
+          chunkSystemPrompt: CHUNK_SYSTEM_PROMPT,
           stanceDirectives: STANCE_DIRECTIVES,
           lensDirectives: LENS_DIRECTIVES,
           expressionDirectives: EXPRESSION_DIRECTIVES,

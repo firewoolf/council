@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 import { MessageCard } from './MessageCard';
+import { TypingIndicator } from './TypingIndicator';
 import { cn } from '@/lib/utils';
+import type { DebatePhase, PlaybackSpeed } from '@/hooks/useDebate';
 import type { ChunkMeta, DirectionAction, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
@@ -25,6 +27,13 @@ interface DebateFeedProps {
    * 제공 시 페르소나 카드 우상단 ⋯ 버튼이 활성화된다.
    */
   onDirect?: (action: DirectionAction) => void;
+  phase?: DebatePhase;
+  activeSpeakerId?: string | null;
+  thinkingMemberId?: string | null;
+  speed?: PlaybackSpeed;
+  onAdvance?: () => void;
+  onSelectMember?: (memberId: string) => void;
+  scrollContainerRef?: React.RefObject<HTMLElement | null>;
 }
 
 /** 바닥 근처로 판정할 스크롤 임계값(px). */
@@ -51,6 +60,13 @@ export function DebateFeed({
   chunks,
   emptyHint,
   onDirect,
+  phase = 'idle',
+  activeSpeakerId = null,
+  thinkingMemberId = null,
+  speed = 1,
+  onAdvance,
+  onSelectMember,
+  scrollContainerRef,
 }: DebateFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -58,11 +74,18 @@ export function DebateFeed({
 
   const measureNearBottom = useCallback(() => {
     if (typeof window === 'undefined') return true;
+    const container = scrollContainerRef?.current;
+    if (container) {
+      return (
+        container.scrollHeight - (container.scrollTop + container.clientHeight) <
+        NEAR_BOTTOM_PX
+      );
+    }
     const doc = document.scrollingElement ?? document.documentElement;
     const distanceFromBottom =
       doc.scrollHeight - (window.scrollY + window.innerHeight);
     return distanceFromBottom < NEAR_BOTTOM_PX;
-  }, []);
+  }, [scrollContainerRef]);
 
   useEffect(() => {
     function onScroll() {
@@ -70,10 +93,11 @@ export function DebateFeed({
       setIsNearBottom(atBottom);
       if (atBottom) setUnreadCount(0);
     }
-    window.addEventListener('scroll', onScroll, { passive: true });
+    const scrollTarget = scrollContainerRef?.current ?? window;
+    scrollTarget.addEventListener('scroll', onScroll, { passive: true });
     setIsNearBottom(measureNearBottom());
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [measureNearBottom]);
+    return () => scrollTarget.removeEventListener('scroll', onScroll);
+  }, [measureNearBottom, scrollContainerRef]);
 
   const prevMessageCount = useRef(messages.length);
   useEffect(() => {
@@ -82,16 +106,26 @@ export function DebateFeed({
     if (delta <= 0) return;
 
     if (isNearBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      const container = scrollContainerRef?.current;
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      } else {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
     } else {
       setUnreadCount((c) => c + delta);
     }
-  }, [messages.length, isNearBottom]);
+  }, [messages.length, isNearBottom, scrollContainerRef]);
 
   const jumpToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const container = scrollContainerRef?.current;
+    if (container) {
+      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
     setUnreadCount(0);
-  }, []);
+  }, [scrollContainerRef]);
 
   /** id → 메시지 (반박 대상 lookup) */
   const messageById = useMemo(() => {
@@ -136,40 +170,41 @@ export function DebateFeed({
       messages: Message[];
     }[] = [];
 
-    const flat: Message[] = [];
-    const byChunk = new Map<string, Message[]>();
+    const ordered = [...messages].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
 
-    for (const m of messages) {
-      if (!m.chunkId) {
-        flat.push(m);
-        continue;
+    for (const message of ordered) {
+      const key = message.chunkId ?? `__flat__-${message.id}`;
+      const previous = out[out.length - 1];
+      if (previous?.key === key) {
+        previous.messages.push(message);
+      } else {
+        out.push({
+          key,
+          meta: message.chunkId
+            ? (chunkMetaById.get(message.chunkId) ?? null)
+            : null,
+          messages: [message],
+        });
       }
-      const arr = byChunk.get(m.chunkId) ?? [];
-      arr.push(m);
-      byChunk.set(m.chunkId, arr);
-    }
-
-    if (flat.length > 0) {
-      out.push({ key: '__flat__', meta: null, messages: flat });
-    }
-
-    // chunks 의 등록 순서를 유지 — chunks 배열 순서대로 그룹을 만든다.
-    for (const c of chunks) {
-      const msgs = byChunk.get(c.id);
-      if (!msgs || msgs.length === 0) continue;
-      out.push({ key: c.id, meta: c, messages: msgs });
-    }
-
-    // chunks 에 없는데 messages 에는 chunkId 가 박힌 경우(드물지만 fallback)
-    for (const [cid, msgs] of byChunk) {
-      if (chunkMetaById.has(cid)) continue;
-      out.push({ key: cid, meta: null, messages: msgs });
     }
 
     return out;
   }, [messages, chunks]);
 
   const showUnreadBadge = !isNearBottom && unreadCount > 0;
+  const latestMessageId = messages.reduce<Message | null>((latest, message) => {
+    if (!latest) return message;
+    return new Date(message.createdAt).getTime() >=
+      new Date(latest.createdAt).getTime()
+      ? message
+      : latest;
+  }, null)?.id;
+  const thinkingMember = thinkingMemberId
+    ? (castMap.get(thinkingMemberId) ?? null)
+    : null;
 
   if (messages.length === 0 && emptyHint) {
     return (
@@ -226,12 +261,25 @@ export function DebateFeed({
                   showSignature={firstSpeakerMessageIds.has(m.id)}
                   cast={cast}
                   onDirect={onDirect}
+                  onSelectMember={onSelectMember}
+                  isLatest={
+                    phase === 'playing' &&
+                    m.id === latestMessageId &&
+                    m.speakerId !== null
+                  }
+                  isActive={m.speakerId === activeSpeakerId}
+                  speed={speed}
+                  onAdvance={onAdvance}
                 />
               );
             })}
           </div>
         </section>
       ))}
+
+      {thinkingMember && phase === 'generating' && (
+        <TypingIndicator persona={thinkingMember} />
+      )}
 
       <div ref={bottomRef} />
 
@@ -240,9 +288,12 @@ export function DebateFeed({
           type="button"
           onClick={jumpToBottom}
           className={cn(
-            'fixed bottom-28 right-4 z-20 flex items-center gap-1.5 rounded-full',
+            scrollContainerRef
+              ? 'sticky bottom-3 ml-auto'
+              : 'fixed bottom-40 right-4 sm:right-6',
+            'z-20 flex w-fit items-center gap-1.5 rounded-full',
             'bg-primary px-3 py-2 text-xs font-semibold text-white shadow-lg',
-            'transition-transform hover:scale-105 animate-fade-in sm:right-6',
+            'transition-transform hover:scale-105 animate-fade-in',
           )}
           aria-label={`아래 ${unreadCount}개 새 발언으로 이동`}
         >

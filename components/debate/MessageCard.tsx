@@ -4,9 +4,11 @@ import { useState } from 'react';
 import { CornerDownRight, Flag, HelpCircle, Megaphone, MoreHorizontal, Sparkles, User } from 'lucide-react';
 
 import { DirectionMenu } from './DirectionMenu';
+import { TypewriterText } from './TypewriterText';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { LENS_LABEL_KR, SIGNATURE_LINES } from '@/lib/prompts/personas';
 import { cn } from '@/lib/utils';
+import type { PlaybackSpeed } from '@/hooks/useDebate';
 import type { DirectionAction, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
@@ -33,6 +35,11 @@ interface MessageCardProps {
    * 사용자 카드·메타지시 카드는 무시.
    */
   onDirect?: (action: DirectionAction) => void;
+  onSelectMember?: (memberId: string) => void;
+  isLatest?: boolean;
+  isActive?: boolean;
+  speed?: PlaybackSpeed;
+  onAdvance?: () => void;
 }
 
 /**
@@ -55,6 +62,11 @@ export function MessageCard({
   showSignature,
   cast,
   onDirect,
+  onSelectMember,
+  isLatest = false,
+  isActive = false,
+  speed = 1,
+  onAdvance,
 }: MessageCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -110,20 +122,35 @@ export function MessageCard({
       : undefined;
 
   return (
-    <div
-      className={cn(
-        'relative flex flex-col gap-2 rounded-xl border p-4 animate-card-enter',
-        message.isKeyPoint
-          ? 'border-accent/50 animate-keypoint-pulse'
-          : 'border-border',
-      )}
-      style={{
-        borderLeftWidth,
-        borderLeftColor: speaker.colorTo,
-        // 트랙 ⑤-2a — 페르소나 색 alpha 1.5% 배경 그라디언트
-        background: `linear-gradient(135deg, ${speaker.colorFrom}05, transparent 40%), hsl(var(--surface))`,
-      }}
-    >
+    <div className="flex items-start gap-2 animate-card-enter">
+      <button
+        type="button"
+        onClick={() => onSelectMember?.(speaker.id)}
+        aria-label={`${speaker.name} 발언 모아보기`}
+        className="mt-1 shrink-0 rounded-full lg:hidden"
+      >
+        <PersonaOrb
+          persona={speaker}
+          size={40}
+          glow={isActive ? 'strong' : 'soft'}
+          state={isActive ? 'speaking' : 'idle'}
+        />
+      </button>
+      <div
+        className={cn(
+          'relative flex max-w-[88%] flex-1 flex-col gap-2 rounded-2xl rounded-tl-md border p-3 lg:max-w-none lg:rounded-xl lg:p-4',
+          message.isKeyPoint
+            ? 'border-accent/50 animate-keypoint-pulse'
+            : isActive
+              ? 'border-primary/60 shadow-[0_0_24px_hsl(var(--primary)/0.18)]'
+              : 'border-border',
+        )}
+        style={{
+          borderLeftWidth,
+          borderLeftColor: speaker.colorTo,
+          background: `linear-gradient(135deg, ${speaker.colorFrom}09, transparent 45%), hsl(var(--surface))`,
+        }}
+      >
       {/* 트랙 ③ — 카드 우상단 ⋯ 버튼 + DirectionMenu */}
       {canDirect && (
         <div className="absolute right-2 top-2 z-10">
@@ -171,7 +198,14 @@ export function MessageCard({
 
       {/* 발언자 */}
       <div className="flex items-center gap-2">
-        <PersonaOrb persona={speaker} size={28} glow="soft" />
+        <button
+          type="button"
+          onClick={() => onSelectMember?.(speaker.id)}
+          aria-label={`${speaker.name} 발언 모아보기`}
+          className="hidden rounded-full lg:block"
+        >
+          <PersonaOrb persona={speaker} size={40} glow="soft" />
+        </button>
         <span className="text-sm font-semibold text-text">{speaker.name}</span>
         {/* lens 미니 칩 (⑤-2a, Phase E 이후 lens 표기) */}
         <span
@@ -219,9 +253,18 @@ export function MessageCard({
       )}
 
       {/* 본문 */}
-      <p className="whitespace-pre-wrap text-base font-normal leading-relaxed text-text">
-        {message.content}
-      </p>
+      {isLatest && onAdvance ? (
+        <TypewriterText
+          text={message.content}
+          speed={speed}
+          onAdvance={onAdvance}
+        />
+      ) : (
+        <p className="whitespace-pre-wrap text-base font-normal leading-relaxed text-text">
+          {message.content}
+        </p>
+      )}
+      </div>
     </div>
   );
 }

@@ -66,6 +66,7 @@ const directiveString = z.string().min(10).max(800);
 export const promptsSchema = z.object({
   basePrompt: z.string().min(50, '최소 50자').max(4000),
   outputHint: z.string().min(20, '최소 20자').max(2000),
+  chunkSystemPrompt: z.string().min(50, '최소 50자').max(8000),
   /**
    * Phase E — 3축 directive 지시 조각.
    * stance 3개 + lens 3개 + expression 2개 = 8개.

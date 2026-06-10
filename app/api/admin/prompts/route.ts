@@ -1,7 +1,4 @@
-/**
- * 공통 프롬프트 (BASE_PROMPT + OUTPUT_HINT) 수정 엔드포인트.
- * PUT body = PromptsInput
- */
+/** 어드민 프롬프트 수정 엔드포인트. PUT body = PromptsInput */
 
 import { NextResponse } from 'next/server';
 
@@ -41,7 +38,7 @@ export async function PUT(request: Request) {
     const result = await commitFile(
       'data/prompts.json',
       fileContent,
-      'chore(admin): update common prompts (BASE/OUTPUT)',
+      'chore(admin): update prompt configuration',
     );
     return NextResponse.json({
       ok: true,

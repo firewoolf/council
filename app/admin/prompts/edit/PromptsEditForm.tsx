@@ -79,6 +79,23 @@ export function PromptsEditForm({ initial }: Props) {
         )}
       </div>
 
+      <div className="space-y-1.5">
+        <Label>CHUNK_SYSTEM_PROMPT</Label>
+        <p className="text-xs text-text-muted">
+          청크 작가의 충돌 원칙, 보이스 카드 헌장, 장면 비트를 정의합니다.
+        </p>
+        <Textarea
+          {...register('chunkSystemPrompt')}
+          rows={28}
+          className="font-mono text-xs leading-relaxed"
+        />
+        {errors.chunkSystemPrompt && (
+          <p className="text-xs text-destructive">
+            {errors.chunkSystemPrompt.message}
+          </p>
+        )}
+      </div>
+
       {/* Phase E — 3축 directive */}
       <div className="space-y-3">
         <div>

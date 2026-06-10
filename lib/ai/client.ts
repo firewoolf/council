@@ -126,7 +126,7 @@ export async function testApiKey(
  * 추천·결론은 낮게 — 구조화 출력 안정성 우선.
  */
 const TEMPERATURE = {
-  speech: 0.9,
+  speech: 0.75,
   recommend: 0.45,
   conclusion: 0.55,
 } as const;
@@ -278,9 +278,8 @@ export async function generateChunk(args: {
       }),
       temperature: TEMPERATURE.speech,
       maxRetries: 1,
-      // ⑤-1f-A 속도 개선: 청크 한 단위는 ~3턴×200자 + nextTopics 4×100자 ≈ 1000 토큰.
-      // 모델이 *불필요하게 길게* 생성하는 시간을 차단. 안전 마진 포함 1500.
-      maxTokens: 1500,
+      // P-A-2 장면 비트가 3~5턴 구조를 충분히 완결할 수 있도록 안전 마진을 둔다.
+      maxTokens: 1800,
     });
     const { chunk } = sanitizeChunk(object);
     return chunk;
@@ -361,6 +360,7 @@ export async function streamChunk(args: {
       }),
       temperature: TEMPERATURE.speech,
       maxRetries: 0,
+      maxTokens: 1800,
       abortSignal,
     });
 

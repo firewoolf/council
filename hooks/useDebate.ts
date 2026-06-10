@@ -69,6 +69,8 @@ interface UseDebateReturn {
   speed: PlaybackSpeed;
   /** 현재 청크의 재생 진행 — revealed / total turn 수 */
   progress: { revealed: number; total: number };
+  /** 스트림에서 추가 확정 턴을 기다리는 중인지 */
+  isStreaming: boolean;
   /**
    * 트랙 ⑤-2a — 스테이지 UI.
    * playing 중 가장 최근 reveal 된 turn 의 speakerId.
@@ -97,11 +99,11 @@ interface UseDebateReturn {
     /** 갈림길에서 "결론 내기" */
     conclude: () => void;
     /**
-     * ⑤-1f-B — generating 중 사용자 메모.
-     *   asUtterance=false → 다음 청크 transcript 끝에 시그널로 1회 주입 (발언 아님)
+     * 토론 진행 중 사용자 발언/시그널.
+     *   asUtterance=false → 다음 청크 transcript 끝에 시그널로 1회 주입
      *   asUtterance=true  → 즉시 사용자 발언 메시지로 추가
      */
-    submitWaitingMemo: (text: string, opts: { asUtterance: boolean }) => void;
+    submitSpeech: (text: string, opts: { asUtterance: boolean }) => void;
     /**
      * 트랙 ③ — 카드별 감독 디렉션.
      * pendingDirectionsRef 에 누적. 다음 청크 생성 시 transcript 끝에 시스템 지시로 주입 후 비워짐.
@@ -308,7 +310,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   // (phase 가 아니라 genTrigger 에 키 → 첫 턴 reveal 로 playing 전이해도 생성이 끊기지 않음.)
   const pendingTopicRef = useRef<{ topic: string; isFirst: boolean } | null>(null);
 
-  // ⑤-1f-B 대기 UX — generating 중 사용자가 적어둔 *시그널 메모*.
+  // 사용자 *시그널 메모*. 다음 청크 생성 시 한 번 소비한다.
   // 발언이 아니라 다음 청크의 transcript 끝에 "[사용자 메모]" 로 한 번 주입되고 비워짐.
   const pendingMemoRef = useRef<string | null>(null);
 
@@ -748,15 +750,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
     setPhase('concluding');
   }, []);
 
-  /**
-   * ⑤-1f-B — generating 중 사용자가 적은 메모.
-   *
-   * - asUtterance: false → pendingMemoRef 에 보관. 다음 청크 생성 시
-   *   transcript 끝에 "[사용자 메모]" 로 한 번 주입되고 비워진다. 발언 아님.
-   * - asUtterance: true → 즉시 *사용자 발언* 으로 추가. 평소 발언과 동일하게
-   *   히스토리에 쌓이고, transcript 가 자연스럽게 포함하게 된다.
-   */
-  const submitWaitingMemo = useCallback(
+  /** 토론 진행 중 사용자 발언 또는 다음 장면 시그널을 받는다. */
+  const submitSpeech = useCallback(
     (text: string, opts: { asUtterance: boolean }) => {
       const trimmed = text.trim();
       if (!trimmed) return;
@@ -820,6 +815,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
       revealed: Math.min(revealedTurnCount, currentChunkTurns.length),
       total: currentChunkTurns.length,
     },
+    isStreaming:
+      (phase === 'generating' || phase === 'playing') && !streamDone,
     actions: {
       start,
       play,
@@ -829,7 +826,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
       chooseTopic,
       submitCustomTopic,
       conclude,
-      submitWaitingMemo,
+      submitSpeech,
       submitDirection,
     },
   };

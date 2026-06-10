@@ -11,6 +11,7 @@ import {
   LENS_DIRECTIVES,
   EXPRESSION_DIRECTIVES,
 } from '@/lib/prompts/base';
+import { CHUNK_SYSTEM_PROMPT } from '@/lib/prompts/orchestrator';
 
 export const dynamic = 'force-dynamic';
 
@@ -73,6 +74,16 @@ export default function AdminPromptsPage() {
         </p>
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-border bg-surface-2 p-4 text-xs leading-relaxed text-text/90">
           {OUTPUT_HINT}
+        </pre>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold text-text">CHUNK_SYSTEM_PROMPT</h2>
+        <p className="text-xs text-text-muted">
+          청크 작가에게 적용되는 충돌 원칙, 보이스 카드 헌장, 장면 비트.
+        </p>
+        <pre className="overflow-x-auto whitespace-pre-wrap rounded-xl border border-border bg-surface-2 p-4 text-xs leading-relaxed text-text/90">
+          {CHUNK_SYSTEM_PROMPT}
         </pre>
       </section>
 
