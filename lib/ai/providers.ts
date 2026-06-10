@@ -38,6 +38,13 @@ export interface ProviderConfig {
   keyPattern: RegExp;
   /** 브라우저 직접 호출 가능 여부 (CORS) */
   browserDirect: boolean;
+  /**
+   * 트랙 ⑤-6 (R-2) — 구조화 스트리밍(streamObject) 지원 여부.
+   * true 면 청크를 partialObjectStream 으로 흘려받아 첫 턴 조기 재생.
+   * false 면 기존 generateObject 경로(완성 후 일괄)로 폴백 — 점진 전환 장치.
+   * 라이브 검증에서 partial JSON 이 불안정한 공급사는 false 로 내리면 현행 복귀.
+   */
+  supportsStream: boolean;
   /** orb 색상 — 설정 카드에서 사용 */
   accent: { from: string; to: string };
   /** 무료 한도 한 줄 요약 */
@@ -64,6 +71,7 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     // AIzaSy로 시작하는 39자 키
     keyPattern: /^AIza[A-Za-z0-9_-]{35}$/,
     browserDirect: true,
+    supportsStream: true,
     accent: { from: '#4285F4', to: '#34A853' },
     freeTier: '분당 15회 / 일 1000회 무료 (Gemini 2.5 Flash-Lite 기준)',
     // Gemini: 한국어·구조화 출력 안정 → 추천 + 결론 + 청크 (중첩 배열 안정성 필요)
@@ -81,6 +89,7 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     // gsk_로 시작
     keyPattern: /^gsk_[A-Za-z0-9]{40,}$/,
     browserDirect: true,
+    supportsStream: true,
     accent: { from: '#F55036', to: '#FF8A65' },
     freeTier: '분당 30회 / 일 14400회 무료 (Llama 3.3 70B 기준)',
     // Groq: 초고속 + RPM 30 → 턴당 1회 호출되는 토론 발언에 최적
@@ -100,6 +109,9 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     // sk-or-v1- 접두사 + 64자 hex 정도
     keyPattern: /^sk-or-v1-[A-Za-z0-9]{40,}$/,
     browserDirect: true,
+    // openrouter/free 는 실제 라우팅 모델이 매 호출 달라져 partial JSON 안정성 미상 —
+    // 보수적으로 스트림 off. 기존 generateObject 경로로 동작.
+    supportsStream: false,
     accent: { from: '#6E40C9', to: '#A5A5FF' },
     freeTier: '무료 모델 일 50회 (크레딧 충전 시 1000회) / 분당 20회',
     // OpenRouter: 폴백 범용 — roles 비워서 모든 작업 가능
@@ -120,6 +132,7 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     // 워크오더 §6: CORS 실측 필요. SDK docs 기준 브라우저 호출 지원으로 표기하지만,
     // 실제 배포 후 네트워크 탭에서 확인 후 false 로 토글할 수 있음.
     browserDirect: true,
+    supportsStream: true,
     accent: { from: '#0F766E', to: '#5EEAD4' },
     freeTier: '일 100만 토큰 무료 (gpt-oss-120b · 고수요 시 한도 일시 축소)',
     // Cerebras: 초고속 추론 → 토론 발언 (대안 debate provider)
@@ -134,6 +147,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     modelId: 'claude-sonnet-4-6',
     keyPattern: /^sk-ant-[A-Za-z0-9_-]{20,}$/,
     browserDirect: false,
+    // 브라우저 직접 호출 경로 없음 — 스트림 대상 아님.
+    supportsStream: false,
     accent: { from: '#D97757', to: '#F4A887' },
     freeTier: '무료 한도 없음. 사용량 과금.',
   },

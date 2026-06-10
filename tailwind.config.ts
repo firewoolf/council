@@ -60,7 +60,6 @@ const config: Config = {
         'card-enter': 'card-enter 0.4s ease-out',
         // 트랙 ⑤-5a — Aha 모먼트 (isKeyPoint 1회 발광)
         'keypoint-pulse': 'keypoint-pulse 0.8s ease-out',
-        'spotlight-glow': 'spotlight-glow 1.8s ease-in-out infinite',
       },
     },
   },

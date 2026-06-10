@@ -14,7 +14,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createCerebras } from '@ai-sdk/cerebras';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-import { generateObject } from 'ai';
+import { generateObject, streamObject } from 'ai';
 import { z } from 'zod';
 
 import {
@@ -179,6 +179,8 @@ export const chunkSchema = z.object({
 });
 
 export type Chunk = z.infer<typeof chunkSchema>;
+/** 트랙 ⑤-6 — 청크 1턴. streamChunk.onTurn 의 계약 타입. */
+export type ChunkTurn = z.infer<typeof chunkTurnSchema>;
 
 /**
  * 트랙 ⑤-1 — LLM 응답 정규화.
@@ -256,7 +258,7 @@ export async function generateChunk(args: {
   provider: AiProvider;
   apiKey: string;
   concern: string;
-  panel: { name: string; role: string; stance: string }[];
+  panel: { name: string; role: string; stance: string; voiceCard: string }[];
   topic: string;
   transcript: string;
   isFirst: boolean;
@@ -281,6 +283,117 @@ export async function generateChunk(args: {
       maxTokens: 1500,
     });
     const { chunk } = sanitizeChunk(object);
+    return chunk;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
+}
+
+/**
+ * 트랙 ⑤-6 (R-2) — 스트림 청크 부분 turn 정규화.
+ *
+ * partialObjectStream 의 turn 은 모든 필드가 optional(DeepPartial)이다.
+ * 확정 콜백에 넘기기 전 ChunkTurn 형태로 채운다.
+ * replyToIndex 는 자기 인덱스 이전만 유효 — 그 외는 null (부록 A 가드).
+ */
+function normalizeStreamTurn(
+  t: {
+    speakerName?: string;
+    message?: string;
+    replyToIndex?: number | null;
+    isKeyPoint?: boolean;
+  },
+  index: number,
+): ChunkTurn {
+  const r = t.replyToIndex;
+  const replyToIndex =
+    typeof r === 'number' && r >= 0 && r < index ? r : null;
+  return {
+    speakerName: t.speakerName ?? '',
+    message: t.message ?? '',
+    replyToIndex,
+    isKeyPoint: t.isKeyPoint ?? false,
+  };
+}
+
+/**
+ * 트랙 ⑤-6 (R-2) — 스트리밍 청크 생성.
+ *
+ * streamObject 의 partialObjectStream 으로 턴이 *확정되는 즉시* onTurn 콜백한다.
+ * turns[i+1] 의 존재 = turns[i] 확정 (더 이상 자라지 않음). 마지막 턴은 스트림
+ * 종료 시 최종 객체(zod 검증 통과본)에서 확정된다.
+ *
+ * 계약:
+ *   - onTurn(turn, index) 는 index 오름차순, 중복 없음.
+ *   - 반환값은 sanitizeChunk 통과본 (generateChunk 와 동일 형태).
+ *   - maxRetries: 0 — 재시도는 runWithFallback 의 공급사 전환이 담당(이중 금지).
+ *   - 전체 60초 타임아웃 + 외부 signal 합성.
+ */
+export async function streamChunk(args: {
+  provider: AiProvider;
+  apiKey: string;
+  concern: string;
+  panel: { name: string; role: string; stance: string; voiceCard: string }[];
+  topic: string;
+  transcript: string;
+  isFirst: boolean;
+  signal?: AbortSignal;
+  /** 턴이 확정될 때마다 — sanitize 전 raw turn (index 순서 보장) */
+  onTurn: (turn: ChunkTurn, index: number) => void;
+}): Promise<Chunk> {
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const timeout = AbortSignal.timeout(60_000);
+    const abortSignal = args.signal
+      ? AbortSignal.any([args.signal, timeout])
+      : timeout;
+
+    const result = streamObject({
+      model,
+      schema: chunkSchema,
+      system: CHUNK_SYSTEM_PROMPT,
+      prompt: buildChunkPrompt({
+        concern: args.concern,
+        panel: args.panel,
+        topic: args.topic,
+        transcript: args.transcript,
+        isFirst: args.isFirst,
+      }),
+      temperature: TEMPERATURE.speech,
+      maxRetries: 0,
+      abortSignal,
+    });
+
+    let confirmed = 0;
+    for await (const partial of result.partialObjectStream) {
+      const turns = partial.turns;
+      if (!Array.isArray(turns)) continue;
+      // turns[i+1] 의 존재 = turns[i] 확정. 순차 커서 — 인덱스 점프 금지(부록 A).
+      while (confirmed < turns.length - 1) {
+        const t = turns[confirmed];
+        if (
+          !t ||
+          typeof t.speakerName !== 'string' ||
+          typeof t.message !== 'string' ||
+          t.message.length === 0
+        ) {
+          // 불완전 턴 — 커서를 전진시키지 않고 다음 partial 을 기다린다.
+          // (전진시키면 이 인덱스가 표시·저장 양쪽에서 영구 유실 — 검수 픽스 2026-06-10)
+          // 영구 불완전(빈 message 등)이면 스트림 종료 후 아래 복구 루프가
+          // confirmed 부터 순서대로 일괄 확정한다 — 유실·역순 없음.
+          break;
+        }
+        args.onTurn(normalizeStreamTurn(t, confirmed), confirmed);
+        confirmed++;
+      }
+    }
+
+    const final = await result.object; // zod 최종 검증 — 실패 시 throw → 폴백
+    const { chunk } = sanitizeChunk(final);
+    // 마지막 턴 + (스트림 중 미확정으로 남은 턴) 확정 콜백.
+    for (let i = confirmed; i < chunk.turns.length; i++) {
+      args.onTurn(chunk.turns[i]!, i);
+    }
     return chunk;
   } catch (err) {
     throw classifyAiError(args.provider, err);

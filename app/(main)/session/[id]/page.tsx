@@ -13,15 +13,14 @@ import {
   Trash2,
   Volume2,
   VolumeX,
-  X,
 } from 'lucide-react';
 
 import { BackgroundPicker } from '@/components/debate/BackgroundPicker';
 import { DebateControls } from '@/components/debate/DebateControls';
-import { DebateFeed } from '@/components/debate/DebateFeed';
 import { DebateStage } from '@/components/debate/DebateStage';
 import { PersonaDetailDrawer } from '@/components/debate/PersonaDetailDrawer';
 import { SteeringPanel } from '@/components/debate/SteeringPanel';
+import { TranscriptPanel } from '@/components/debate/TranscriptPanel';
 import { WaitingMemoArea } from '@/components/debate/WaitingMemoArea';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
@@ -30,6 +29,7 @@ import { useHasMounted } from '@/hooks/useHasMounted';
 import { isMuted, setMuted } from '@/lib/sound';
 import { SIGNATURE_LINES } from '@/lib/prompts/personas';
 import { DEFAULT_BACKGROUND_ID } from '@/lib/stage/backgrounds';
+import { useSessionUiStore } from '@/store/session-ui';
 import { useSessionsStore } from '@/store/sessions';
 import { useStageStore } from '@/store/stage';
 import { cn } from '@/lib/utils';
@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
  *
  * 레이아웃:
  *   - 상단: 고민 collapsible 헤더
- *   - 본문: DebateFeed (revealedMessages)
+ *   - 본문: DebateStage + TranscriptPanel
  *   - phase==='steering': SteeringPanel 등장 (피드 아래)
  *   - 하단 sticky: DebateControls (재생 트랜스포트)
  */
@@ -71,12 +71,12 @@ export default function SessionRoomPage() {
   const [headerOpen, setHeaderOpen] = useState(false);
   // ⑤-5f-B — mute 토글 상태 (localStorage 에서 초기화, setMuted 와 동기화)
   const [soundMuted, setSoundMuted] = useState(() => isMuted());
-  // 트랙 ⑤-2b — PersonaDetailDrawer 열림 대상
-  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  // ⑤-5h — 배경 선택 + 대화록 토글
+  const sheet = useSessionUiStore((s) => s.sheet);
+  const selectedMemberId = useSessionUiStore((s) => s.selectedMemberId);
+  const openMemberDrawer = useSessionUiStore((s) => s.openMemberDrawer);
+  const openBgPicker = useSessionUiStore((s) => s.openBgPicker);
+  const closeSheet = useSessionUiStore((s) => s.closeSheet);
   const backgroundId = useStageStore((s) => s.backgroundBySession[id]) ?? DEFAULT_BACKGROUND_ID;
-  const [bgPickerOpen, setBgPickerOpen] = useState(false);
-  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   /** 드로어 대상 멤버 */
   const selectedMember = useMemo(
@@ -98,8 +98,14 @@ export default function SessionRoomPage() {
     activeSpeakerId ? (cast.find((c) => c.id === activeSpeakerId) ?? null)
     : thinkingMemberId ? (cast.find((c) => c.id === thinkingMemberId) ?? null)
     : null;
-  const stageMode: 'speaking' | 'thinking' | 'idle' =
-    activeSpeakerId ? 'speaking' : thinkingMemberId ? 'thinking' : 'idle';
+  const stageMode: 'speaking' | 'thinking' | 'idle' | 'concluded' =
+    phase === 'concluded'
+      ? 'concluded'
+      : activeSpeakerId
+        ? 'speaking'
+        : thinkingMemberId
+          ? 'thinking'
+          : 'idle';
   const lastRevealed = revealedMessages[revealedMessages.length - 1] ?? null;
   const stageLine =
     stageMode === 'speaking' && lastRevealed && lastRevealed.speakerId === stageSpeaker?.id
@@ -107,8 +113,6 @@ export default function SessionRoomPage() {
   const stageSig =
     stageMode === 'speaking' && stageSpeaker?.source === 'archetype' && stageSpeaker.archetypeId
       ? SIGNATURE_LINES[stageSpeaker.archetypeId] : undefined;
-
-  const stageActive = phase === 'generating' || phase === 'playing' || phase === 'steering';
 
   useEffect(() => {
     if (mounted && !session) {
@@ -266,71 +270,42 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* ⑤-5h — 재생 중: 무대 + 대화록 / 그 외: 피드만 */}
-      {stageActive ? (
-        <>
-          <DebateStage
-            speaker={stageSpeaker}
-            mode={stageMode}
-            line={stageLine}
-            signatureLine={stageSig}
-            backgroundId={backgroundId}
-            onAdvance={actions.skipTurn}
-            onOpenBackground={() => setBgPickerOpen(true)}
-            onOpenTranscript={() => setTranscriptOpen(true)}
-          />
-          {/* ⑤-1f-B 대기 시간 메모 — generating 중에만 노출 */}
-          {phase === 'generating' && (
-            <WaitingMemoArea onSubmit={actions.submitWaitingMemo} />
-          )}
-          {/* 갈림길 패널 */}
-          {phase === 'steering' && currentChunk && (
-            <SteeringPanel
-              chunk={currentChunk}
-              onChoose={actions.chooseTopic}
-              onCustom={actions.submitCustomTopic}
-              onConclude={actions.conclude}
-            />
-          )}
-          {/* 무대 아래 대화록 — 접을 수 있는 섹션 */}
-          {revealedMessages.length > 0 && (
-            <details className="group rounded-xl border border-border bg-surface overflow-hidden">
-              <summary className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-surface-2">
-                <span className="text-sm font-semibold text-text">대화 기록</span>
-                <ChevronDown className="size-4 text-text-muted transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="border-t border-border bg-background/40 p-4">
-                <DebateFeed
-                  messages={revealedMessages}
-                  cast={cast}
-                  chunks={chunks}
-                  activeSpeakerId={activeSpeakerId}
-                  thinkingMemberId={thinkingMemberId}
-                  onSelectMember={setSelectedMemberId}
-                  onDirect={actions.submitDirection}
-                />
-              </div>
-            </details>
-          )}
-        </>
-      ) : (
-        <>
-          <DebateFeed
-            messages={revealedMessages}
-            cast={cast}
-            chunks={chunks}
-            activeSpeakerId={activeSpeakerId}
-            thinkingMemberId={thinkingMemberId}
-            onSelectMember={setSelectedMemberId}
-            onDirect={actions.submitDirection}
-            emptyHint={
-              phase === 'idle'
-                ? '"토론 시작"을 누르면 패널이 모입니다.'
-                : undefined
-            }
-          />
-        </>
+      <DebateStage
+        cast={cast}
+        speaker={stageSpeaker}
+        mode={stageMode}
+        line={stageLine}
+        signatureLine={stageSig}
+        backgroundId={backgroundId}
+        activeSpeakerId={activeSpeakerId}
+        thinkingMemberId={thinkingMemberId}
+        onSelectMember={openMemberDrawer}
+        onAdvance={actions.skipTurn}
+        onOpenBackground={openBgPicker}
+      />
+
+      {/* ⑤-1f-B 대기 시간 메모 — generating 중에만 노출 */}
+      {phase === 'generating' && (
+        <WaitingMemoArea onSubmit={actions.submitWaitingMemo} />
       )}
+
+      {/* 갈림길 패널 */}
+      {phase === 'steering' && currentChunk && (
+        <SteeringPanel
+          chunk={currentChunk}
+          onChoose={actions.chooseTopic}
+          onCustom={actions.submitCustomTopic}
+          onConclude={actions.conclude}
+        />
+      )}
+
+      <TranscriptPanel
+        phase={phase}
+        messages={revealedMessages}
+        cast={cast}
+        chunks={chunks}
+        onDirect={actions.submitDirection}
+      />
 
       {/* 재생 트랜스포트 (하단 sticky) — 항상 표시 */}
       <DebateControls
@@ -345,34 +320,12 @@ export default function SessionRoomPage() {
         onSkipTurn={actions.skipTurn}
       />
 
-      {/* ⑤-5h — 대화록 오버레이 */}
-      {transcriptOpen && (
-        <div className="fixed inset-0 z-[35] flex flex-col bg-background">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <p className="text-sm font-semibold text-text">대화록</p>
-            <button onClick={() => setTranscriptOpen(false)} aria-label="닫기"
-              className="text-text-muted hover:text-text"><X className="size-4" /></button>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 py-3">
-            <DebateFeed
-              messages={revealedMessages}
-              cast={cast}
-              chunks={chunks}
-              activeSpeakerId={activeSpeakerId}
-              thinkingMemberId={thinkingMemberId}
-              onSelectMember={setSelectedMemberId}
-              onDirect={actions.submitDirection}
-            />
-          </div>
-        </div>
-      )}
-
       {/* ⑤-5h — 배경 선택 시트 */}
       <BackgroundPicker
         sessionId={id}
         currentId={backgroundId}
-        open={bgPickerOpen}
-        onClose={() => setBgPickerOpen(false)}
+        open={sheet === 'bgPicker'}
+        onClose={closeSheet}
       />
 
       {/* 트랙 ⑤-2b — 페르소나 발언 필터 드로어 */}
@@ -383,8 +336,8 @@ export default function SessionRoomPage() {
           allMessages={revealedMessages}
           chunks={chunks}
           cast={cast}
-          open={selectedMemberId !== null}
-          onClose={() => setSelectedMemberId(null)}
+          open={sheet === 'memberDrawer'}
+          onClose={closeSheet}
         />
       )}
     </div>

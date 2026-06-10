@@ -137,7 +137,7 @@ speakerName 은 제공된 패널 명단의 이름과 정확히 일치해야 한�
  */
 export function buildChunkPrompt(args: {
   concern: string;
-  panel: { name: string; role: string; stance: string }[];
+  panel: { name: string; role: string; stance: string; voiceCard: string }[];
   topic: string;
   transcript: string;
   isFirst: boolean;
@@ -145,10 +145,12 @@ export function buildChunkPrompt(args: {
   const { concern, panel, topic, transcript, isFirst } = args;
 
   const panelLines = panel
-    .map(
-      (p) =>
-        `- ${p.name} (${p.role}) — 입장: ${p.stance || '특정 입장 없음(중립)'}`,
-    )
+    .map((p) => {
+      const card = p.voiceCard
+        ? '\n' + p.voiceCard.split('\n').map((l) => `  ${l.trim()}`).join('\n')
+        : '';
+      return `- ${p.name} (${p.role}) — 입장: ${p.stance || '특정 입장 없음(중립)'}${card}`;
+    })
     .join('\n');
 
   const topicLine = isFirst

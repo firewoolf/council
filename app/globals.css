@@ -123,21 +123,6 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* ⑤-5g — 발언자 스포트라이트 진입(화자 전환 시) */
-@keyframes spotlight-enter {
-  from { opacity: 0; transform: translateY(6px) scale(0.99); }
-  to   { opacity: 1; transform: none; }
-}
-.spotlight-enter {
-  animation: spotlight-enter 0.35s ease-out;
-}
-
-/* ⑤-5g — 발언 중 인셋 링 맥동 */
-@keyframes spotlight-glow {
-  0%, 100% { opacity: 0.45; }
-  50%      { opacity: 1; }
-}
-
 /* ⑤-5h — 무대 캐릭터 진입(화자 전환) */
 @keyframes stage-char-enter {
   from { opacity: 0; transform: translateY(14px) scale(0.985); }

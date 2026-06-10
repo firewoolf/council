@@ -195,6 +195,18 @@ export function PersonaForm({ initial, mode }: Props) {
         />
       </Field>
 
+      <Field
+        label="보이스 카드 — 청크 작가에게 주는 배역 노트 3줄"
+        error={errors.voiceCard?.message}
+      >
+        <Textarea
+          {...register('voiceCard')}
+          rows={5}
+          className="font-mono text-xs leading-relaxed"
+          placeholder={'화법: ...\n프레임: ...\n금지: ...'}
+        />
+      </Field>
+
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label>샘플 사용자 질문</Label>

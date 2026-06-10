@@ -9,7 +9,10 @@
  */
 
 import { PERSONAS, PERSONA_MAP } from '@/lib/prompts/personas';
-import { synthesizeCharacterPrompt } from '@/lib/prompts/synthesize';
+import {
+  synthesizeCharacterPrompt,
+  synthesizeVoiceCard,
+} from '@/lib/prompts/synthesize';
 import type {
   Archetype as Persona,
   CastMember,
@@ -108,6 +111,7 @@ export function sanitizePanel(
     }
 
     const stance = raw.stance?.trim() ?? '';
+    const rawVoiceCard = raw.voiceCard?.trim() ?? '';
 
     if (source === 'archetype') {
       const archetypeId = raw.archetypeId ?? '';
@@ -134,6 +138,8 @@ export function sanitizePanel(
           colorFrom: colors.from,
           colorTo: colors.to,
           characterPrompt: synthesizeCharacterPrompt({ role, trait, stance }),
+          voiceCard:
+            rawVoiceCard || synthesizeVoiceCard({ role, trait }),
         });
       } else {
         seenArchetypeIds.add(archetypeId);
@@ -164,6 +170,8 @@ export function sanitizePanel(
         colorFrom: colors.from,
         colorTo: colors.to,
         characterPrompt: synthesizeCharacterPrompt({ role, trait, stance }),
+        voiceCard:
+          rawVoiceCard || synthesizeVoiceCard({ role, trait }),
       });
     }
   }

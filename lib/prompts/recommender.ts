@@ -70,6 +70,13 @@ const panelMemberSchema = z.object({
     .describe('source=archetype 이면 PERSONAS 의 id, 아니면 null'),
   name: z.string().optional(),
   role: z.string().optional().describe('한 줄 역할/도메인'),
+  voiceCard: z.string().optional().describe(
+    `이 멤버의 보이스 카드 3줄. 형식 고정 —
+화법: (말버릇·문장 길이·시작 습관 — 말소리가 들리게)
+프레임: (모든 사안을 보는 고정 렌즈 한 줄)
+금지: (이 사람이 절대 쓰지 않는 말 2~3개)
+직업 설명이 아니라 연기 지시문이다. 다른 멤버와 화법이 겹치면 안 된다.`,
+  ),
   trait: z
     .object({
       stanceAxis: z.string().describe("'advocate' / 'critic' / 'agnostic'"),
@@ -170,6 +177,11 @@ ${concern}
    ✗ "비판적 관점에서 보는 사람"
    ✓ "동물병원 SaaS는 원장 1인 체제 특성상 6개월 안에 시스템을 바꾸지 않는다. 지금 당장 파일럿 계약 없이 개발부터 하지 말라"
 7. reason 은 "왜 이 사람이 이 패널에 필요한가" (50자 이내).
+8. 각 멤버에 voiceCard 3줄을 작성한다 — 화법: / 프레임: / 금지: 형식.
+   "수의학 전문가답게 말한다"는 카드가 아니다. "진료실 사례를 구체명사로 꺼내며,
+   문장을 '현장에서는—'으로 시작하길 즐긴다"가 카드다. 멤버끼리 화법이 겹치면
+   패널 설계 실패다 — 한 명은 짧고 단정적으로, 한 명은 사례 인용으로, 한 명은
+   반문으로 말하게 하라.
 
 [출력]
 스키마에 정의된 JSON 구조로만 응답.`;

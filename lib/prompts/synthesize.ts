@@ -8,8 +8,30 @@
  * Phase E: temperament → trait (3축).
  */
 
-import type { Trait } from '@/types/persona';
+import type { Expression, Lens, Trait } from '@/types/persona';
 import { STANCE_DIRECTIVES, LENS_DIRECTIVES, EXPRESSION_DIRECTIVES } from './base';
+
+const EXPR_LINE: Record<Expression, string> = {
+  provocateur: '직설적. 에두르지 않고 상대 주장의 가장 약한 못을 정면으로 친다.',
+  measured: '구조적. 주장→근거→함의 순서로 말하되 발언마다 단언을 하나 박는다.',
+};
+
+const LENS_LINE: Record<Lens, string> = {
+  analyst: '모든 사안을 수치·근거로 환산해 본다.',
+  empath: '결정이 사람과 동기에 남기는 흔적부터 본다.',
+  pragmatist: '실제 현장에서 어떻게 굴러가는지부터 본다.',
+};
+
+export function synthesizeVoiceCard(input: {
+  role: string;
+  trait: Trait;
+}): string {
+  return [
+    `화법: ${EXPR_LINE[input.trait.expression]}`,
+    `프레임: ${input.role}의 눈 — ${LENS_LINE[input.trait.lens]}`,
+    `금지: 벙벙한 중립, 교과서 일반론, 다른 패널 화법 모방.`,
+  ].join('\n');
+}
 
 export function synthesizeCharacterPrompt(input: {
   role: string;

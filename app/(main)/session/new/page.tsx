@@ -27,7 +27,10 @@ import {
   sanitizePanel,
   LENS_COLORS,
 } from '@/lib/persona-safety';
-import { synthesizeCharacterPrompt } from '@/lib/prompts/synthesize';
+import {
+  synthesizeCharacterPrompt,
+  synthesizeVoiceCard,
+} from '@/lib/prompts/synthesize';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
@@ -191,6 +194,7 @@ export default function NewSessionPage() {
       colorFrom: colors.from,
       colorTo: colors.to,
       characterPrompt: synthesizeCharacterPrompt(input),
+      voiceCard: synthesizeVoiceCard(input),
     };
     setCast((prev) => [...prev, newMember]);
     toast.success(`${newMember.name} 추가됨`);

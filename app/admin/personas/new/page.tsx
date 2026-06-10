@@ -43,6 +43,7 @@ export default function AdminPersonaNewPage() {
     weakness: '',
     systemPrompt:
       '[성격]\n당신은 ___ 전문가다. ___한 관점에서 토론에 참여한다.\n\n[발언 원칙]\n- 150자 이내\n- 구체적 근거와 사례를 들어 반박/제안\n- "맞습니다 대표님" 류 굴복 금지\n\n[당신만의 무기]\n- ___\n- ___',
+    voiceCard: '',
     colorFrom: '#4C1D95',
     colorTo: '#8B5CF6',
     userQuestions: ['예: 이 분야에서 가장 흔한 실패 케이스는?'],

@@ -4,13 +4,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 
-import { generateChunk, generateConclusion } from '@/lib/ai/client';
+import {
+  generateChunk,
+  generateConclusion,
+  streamChunk,
+  type ChunkTurn,
+} from '@/lib/ai/client';
 import { AiCallError } from '@/lib/ai/errors';
-import { PROVIDERS } from '@/lib/ai/providers';
+import { PROVIDERS, type AiProvider } from '@/lib/ai/providers';
 import { runWithFallback } from '@/lib/ai/runWithFallback';
 import { showAiError } from '@/lib/ai/showAiError';
 import { formatDirection, getDirectionLabel } from '@/lib/prompts/directions';
 import { generateIntroStatement } from '@/lib/prompts/intro';
+import { PERSONA_MAP } from '@/lib/prompts/personas';
 import { playSound } from '@/lib/sound';
 import type { SoundEvent } from '@/lib/sound';
 import { readingTime } from '@/lib/utils';
@@ -127,6 +133,48 @@ function generateId(): string {
 }
 
 /**
+ * 트랙 ⑤-6 — 공용 turn→Message 변환 (스트림·레거시 경로 단일화).
+ *
+ * 확정 turn 하나를 표시·저장 겸용 Message 로. 여기서 발급한 id 를 완성 시
+ * appendMessage 에도 그대로 쓴다 — 표시본과 저장본이 동일 객체(부록 B).
+ *
+ * - 명단에 없는 화자(환각) → null (호출자가 toast 후 드롭).
+ * - replyToIndex → 같은 청크 내 앞 turn 의 Message id 로 매핑(ctx.localIndexToMsgId).
+ * - index 기준 멱등을 위해 ctx 맵에 누적하되, 중복 방지는 호출자(handled set)가 담당.
+ */
+interface ConvertCtx {
+  sessionId: string;
+  chunkId: string;
+  nameToCastId: Map<string, string>;
+  localIndexToMsgId: Map<number, string>;
+}
+
+function convertTurn(
+  turn: ChunkTurn,
+  index: number,
+  ctx: ConvertCtx,
+): Message | null {
+  const speakerId = ctx.nameToCastId.get(turn.speakerName);
+  if (!speakerId) return null;
+  const msgId = generateId();
+  ctx.localIndexToMsgId.set(index, msgId);
+  const replyToMsgId =
+    turn.replyToIndex !== null
+      ? ctx.localIndexToMsgId.get(turn.replyToIndex)
+      : undefined;
+  return {
+    id: msgId,
+    sessionId: ctx.sessionId,
+    speakerId,
+    content: turn.message.trim(),
+    createdAt: new Date().toISOString(),
+    chunkId: ctx.chunkId,
+    isKeyPoint: turn.isKeyPoint,
+    ...(replyToMsgId ? { replyTo: replyToMsgId } : {}),
+  };
+}
+
+/**
  * 최근 N 메시지의 화자별 한 줄 압축.
  * "LLM 요약 호출 금지" — 토큰 절약이 청크의 목적이라 단순 조립만.
  *
@@ -199,6 +247,29 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const [isPaused, setIsPaused] = useState(false);
   const [speed, setSpeed] = useState<PlaybackSpeed>(1);
 
+  // ───────────── 트랙 ⑤-6 (R-2) 스트리밍 라이브 큐 — ephemeral (persist 안 함, 원칙 1)
+  // 진행 중 청크의 확정 턴은 store 가 아니라 여기 ref 에만 쌓인다. store 저장은
+  // 스트림 완성 후 일괄(부록 B). 새로고침 시 진행 중 청크는 사라진다(회귀 아님).
+  const liveTurnsRef = useRef<Message[]>([]);
+  /** liveTurnsRef 변경을 렌더에 반영하기 위한 버전 카운터 (ref 는 리렌더 안 함). */
+  const [liveVersion, setLiveVersion] = useState(0);
+  /** 스트림 완성 + 저장 완료 여부 — 모든 턴 reveal 후 steering 진입 게이트. */
+  const [streamDone, setStreamDone] = useState(false);
+  /** 진행 중 청크의 chunkId (저장 시 그대로 사용). */
+  const liveChunkIdRef = useRef<string | null>(null);
+  /** 생성 트리거 — 액션에서 bump. phase 와 분리해 첫 턴 reveal 이 생성을 끊지 않게. */
+  const [genTrigger, setGenTrigger] = useState(0);
+  /** 진행 중 생성의 abort 컨트롤러 (언마운트·재생성 시 취소). */
+  const genAbortRef = useRef<AbortController | null>(null);
+
+  /** 라이브 큐 리셋 — 생성 시작·폴백 재연출·에러 시. */
+  const resetLiveQueue = useCallback(() => {
+    liveTurnsRef.current = [];
+    setRevealedTurnCount(0);
+    setStreamDone(false);
+    setLiveVersion((v) => v + 1);
+  }, []);
+
   // 새로고침 후 — 저장된 청크가 있으면 마지막 청크 끝 + steering 으로 보정.
   // chunks 가 늦게 hydrate 되더라도 한 번 보정.
   const hydratedRef = useRef(false);
@@ -233,9 +304,9 @@ export function useDebate(sessionId: string): UseDebateReturn {
   }, [conclusion, phase]);
 
   // ───────────────────────────── 청크 생성 트리거
-  // phase 가 'generating' 이 될 때 호출. nextTopicForGeneration 에 다음 topic 을 박아둔다.
+  // 액션이 pendingTopicRef 를 박고 genTrigger 를 bump → 아래 effect 가 1회 실행.
+  // (phase 가 아니라 genTrigger 에 키 → 첫 턴 reveal 로 playing 전이해도 생성이 끊기지 않음.)
   const pendingTopicRef = useRef<{ topic: string; isFirst: boolean } | null>(null);
-  const generateInFlightRef = useRef(false);
 
   // ⑤-1f-B 대기 UX — generating 중 사용자가 적어둔 *시그널 메모*.
   // 발언이 아니라 다음 청크의 transcript 끝에 "[사용자 메모]" 로 한 번 주입되고 비워짐.
@@ -246,23 +317,30 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const pendingDirectionsRef = useRef<DirectionAction[]>([]);
 
   useEffect(() => {
-    if (phase !== 'generating') return;
-    if (!session || !hasAnyKey) return;
-    if (activePersonas.length < 2) return;
-    if (generateInFlightRef.current) return;
-
+    if (genTrigger === 0) return; // 초기 마운트
     const pending = pendingTopicRef.current;
     if (!pending) return;
 
+    // 실행 시점의 최신 store 스냅샷 — 생성 직전 추가된 메모/발언까지 포함.
+    const startState = useSessionsStore.getState();
+    const liveKeys = useApiKeyStore.getState().keys;
+    const session = startState.sessions[sessionId];
+    const cast = startState.sessionCast?.[sessionId] ?? [];
+    const hasKey = Object.values(liveKeys).some(Boolean);
+    if (!session || !hasKey || cast.length < 2) return;
+
+    const controller = new AbortController();
+    genAbortRef.current = controller;
     let cancelled = false;
-    generateInFlightRef.current = true;
 
     const handle = setTimeout(async () => {
       if (cancelled) return;
       try {
+        // transcript 는 timeout 시점의 최신 메시지로 (대기 중 추가된 발언 반영).
+        const freshMessages = useSessionsStore.getState().messages[sessionId] ?? [];
         const baseTranscript = pending.isFirst
           ? ''
-          : buildTranscript(safeMessages, cast, 8);
+          : buildTranscript(freshMessages, cast, 8);
 
         // ⑤-1f-B — 대기 메모가 있으면 transcript 끝에 시그널로 주입 (한 번만).
         const memo = pendingMemoRef.current;
@@ -285,14 +363,50 @@ export function useDebate(sessionId: string): UseDebateReturn {
           name: c.name,
           role: c.role,
           stance: c.stance ?? '',
+          voiceCard:
+            (c.source === 'archetype' && c.archetypeId
+              ? PERSONA_MAP[c.archetypeId]?.voiceCard
+              : c.voiceCard) ?? '',
         }));
 
-        const liveKeys = useApiKeyStore.getState().keys;
-        const { result: chunk, usedProvider } = await runWithFallback(
-          'chunk',
-          liveKeys,
-          (provider, apiKey) =>
-            generateChunk({
+        // 라이브 큐 초기화 + 새 청크 슬롯으로 인덱스 점프(저장 전이라 currentChunk=null).
+        const chunkId = generateId();
+        liveChunkIdRef.current = chunkId;
+        resetLiveQueue();
+        setIsPaused(false);
+        const storedCount =
+          useSessionsStore.getState().sessionChunks?.[sessionId]?.length ?? 0;
+        setCurrentChunkIndex(storedCount);
+
+        // 확정 턴을 라이브 큐에 push + 첫 턴에 playing 전이. 시도별로 맵을 새로 만든다
+        // (폴백 시 이전 시도의 부분 턴은 resetLiveQueue 로 폐기 — 원칙 4).
+        const makeCall = (provider: AiProvider, apiKey: string) => {
+          const ctx: ConvertCtx = {
+            sessionId,
+            chunkId,
+            nameToCastId: new Map(cast.map((c) => [c.name, c.id])),
+            localIndexToMsgId: new Map<number, string>(),
+          };
+          const handled = new Set<number>();
+          const onTurn = (turn: ChunkTurn, index: number) => {
+            if (cancelled) return;
+            if (handled.has(index)) return; // index 멱등
+            handled.add(index);
+            const msg = convertTurn(turn, index, ctx);
+            if (!msg) {
+              toast.warning(
+                `모델이 명단에 없는 인물(${turn.speakerName})을 등장시켜 발언을 건너뜁니다.`,
+                { duration: 4_000 },
+              );
+              return;
+            }
+            liveTurnsRef.current = [...liveTurnsRef.current, msg];
+            setLiveVersion((v) => v + 1);
+            setPhase((p) => (p === 'generating' ? 'playing' : p));
+          };
+
+          if (PROVIDERS[provider].supportsStream) {
+            return streamChunk({
               provider,
               apiKey,
               concern: session.concern,
@@ -300,11 +414,35 @@ export function useDebate(sessionId: string): UseDebateReturn {
               topic: pending.topic,
               transcript,
               isFirst: pending.isFirst,
-            }),
+              signal: controller.signal,
+              onTurn,
+            });
+          }
+          // 레거시 경로: 완성 후 일괄 onTurn (인터페이스 동일, 체감만 현행).
+          return generateChunk({
+            provider,
+            apiKey,
+            concern: session.concern,
+            panel,
+            topic: pending.topic,
+            transcript,
+            isFirst: pending.isFirst,
+          }).then((chunk) => {
+            chunk.turns.forEach((t, i) => onTurn(t, i));
+            return chunk;
+          });
+        };
+
+        const { result: chunk, usedProvider } = await runWithFallback(
+          'chunk',
+          liveKeys,
+          makeCall,
           {
             onFallback: (from, to) => {
+              // 이전 시도에서 흘러나간 턴 폐기 후 처음부터 재연출(원칙 4).
+              resetLiveQueue();
               toast.info(
-                `${PROVIDERS[from].displayName} 한도 → ${PROVIDERS[to].displayName} 로 자동 전환`,
+                `장면을 다시 연출합니다 — ${PROVIDERS[from].displayName} 한도 → ${PROVIDERS[to].displayName} 전환`,
                 { duration: 4_000 },
               );
             },
@@ -312,50 +450,16 @@ export function useDebate(sessionId: string): UseDebateReturn {
         );
         if (cancelled) return;
 
-        updateSessionProvider(sessionId, usedProvider);
-
-        // turn → Message 변환
-        const newChunkId = generateId();
-        const nameToCastId = new Map(cast.map((c) => [c.name, c.id]));
-        const localIndexToMessageId = new Map<number, string>();
-        const newMessages: Message[] = [];
-
-        for (let i = 0; i < chunk.turns.length; i++) {
-          const turn = chunk.turns[i]!;
-          const speakerId = nameToCastId.get(turn.speakerName);
-          if (!speakerId) {
-            // 환각 — 명단에 없는 인물. 드롭 + 경고.
-            toast.warning(
-              `모델이 명단에 없는 인물(${turn.speakerName})을 등장시켜 발언을 건너뜁니다.`,
-              { duration: 4_000 },
-            );
-            continue;
-          }
-          const msgId = generateId();
-          localIndexToMessageId.set(i, msgId);
-          const replyToMsgId =
-            turn.replyToIndex !== null
-              ? localIndexToMessageId.get(turn.replyToIndex)
-              : undefined;
-          newMessages.push({
-            id: msgId,
-            sessionId,
-            speakerId,
-            content: turn.message.trim(),
-            createdAt: new Date().toISOString(),
-            chunkId: newChunkId,
-            isKeyPoint: turn.isKeyPoint,
-            ...(replyToMsgId ? { replyTo: replyToMsgId } : {}),
-          });
-        }
-
-        if (newMessages.length === 0) {
+        if (liveTurnsRef.current.length === 0) {
           throw new Error(
             '청크의 모든 발언이 환각 처리됨 — 명단의 이름과 일치하는 발언이 없습니다.',
           );
         }
 
-        for (const m of newMessages) {
+        updateSessionProvider(sessionId, usedProvider);
+
+        // 저장(부록 B) — 완성본 일괄. id 는 convertTurn 발급분 그대로(표시본=저장본).
+        for (const m of liveTurnsRef.current) {
           appendMessage(sessionId, m);
         }
 
@@ -366,7 +470,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
         }));
 
         const chunkMeta: ChunkMeta = {
-          id: newChunkId,
+          id: chunkId,
           sessionId,
           topic: pending.isFirst ? '_first' : pending.topic,
           nextTopics,
@@ -375,15 +479,12 @@ export function useDebate(sessionId: string): UseDebateReturn {
         addChunk(sessionId, chunkMeta);
 
         pendingTopicRef.current = null;
-
-        // 재생 시작 — 새 청크 인덱스로 점프
-        const newIdx = safeChunks.length; // 추가되기 전 길이 = 새 청크의 인덱스
-        setCurrentChunkIndex(newIdx);
-        setRevealedTurnCount(0);
-        setIsPaused(false);
-        setPhase('playing');
+        // 스트림+저장 완료 — 모든 턴 reveal 시 재생 effect 가 steering 으로 보낸다.
+        setStreamDone(true);
       } catch (err) {
         if (cancelled) return;
+        // 표시됐던 부분 턴 폐기(원칙 4) 후 에러.
+        resetLiveQueue();
         if (err instanceof AiCallError) {
           showAiError(err, { alternateProvider: null });
           setError(err.message);
@@ -391,62 +492,95 @@ export function useDebate(sessionId: string): UseDebateReturn {
           setError(err instanceof Error ? err.message : 'unknown');
         }
         setPhase('error');
-      } finally {
-        generateInFlightRef.current = false;
       }
     }, FIRST_GENERATING_DELAY_MS);
 
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(handle);
     };
-  }, [
-    phase,
-    session,
-    hasAnyKey,
-    activePersonas.length,
-    cast,
-    sessionId,
-    safeMessages,
-    safeChunks.length,
-    appendMessage,
-    addChunk,
-    updateSessionProvider,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [genTrigger]);
 
   // ───────────────────────────── 재생 엔진
   // 현재 청크의 turn 들을 readingTime 만큼씩 setTimeout 으로 드러낸다.
   const currentChunk = safeChunks[currentChunkIndex] ?? null;
+  // 소스 분기(부록 B): chunkMeta 등록 후 = store 필터 / 등록 전(스트리밍 중) = 라이브 큐.
+  // id 가 동일하므로 저장 전후 전환에 깜빡임·키 충돌 없음.
   const currentChunkTurns = useMemo<readonly Message[]>(() => {
-    if (!currentChunk) return [];
-    return safeMessages.filter((m) => m.chunkId === currentChunk.id);
-  }, [currentChunk, safeMessages]);
+    if (currentChunk) {
+      return safeMessages.filter((m) => m.chunkId === currentChunk.id);
+    }
+    // 진행 중 라이브 청크 (아직 store 미저장).
+    return liveTurnsRef.current;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChunk, safeMessages, liveVersion]);
+
+  // 재생 타이머는 ref 로 직접 관리한다 — 스트리밍 중 새 턴이 도착(liveVersion 증가)해도
+  // *현재 reveal 중인 턴*의 카운트다운을 리셋하지 않기 위함. effect cleanup 에 타이머를
+  // 묶으면 매 턴 도착마다 타이머가 초기화돼 첫 턴 등장이 생성 완료까지 밀린다(R-2 무력화).
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduledIndexRef = useRef<number>(-1);
 
   useEffect(() => {
-    if (phase !== 'playing') return;
-    if (isPaused) return;
-    if (!currentChunk) return;
+    const clearReveal = () => {
+      if (revealTimerRef.current) {
+        clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+      scheduledIndexRef.current = -1;
+    };
+
+    if (phase !== 'playing' || isPaused) {
+      clearReveal();
+      return;
+    }
 
     if (revealedTurnCount >= currentChunkTurns.length) {
-      // 한 청크 다 드러남 → 여유 후 steering (⑤-5e: 1500ms 로 충분히 확보)
-      const handle = setTimeout(() => {
-        setPhase('steering');
-      }, INTER_CHUNK_COOLDOWN_MS);
+      // 큐 소진.
+      clearReveal();
+      if (!streamDone) return; // 다음 턴 도착(liveVersion 변경)까지 대기.
+      // 스트림 완료 + 저장 완료 + 모두 reveal → 여유 후 steering (⑤-5e: 1500ms).
+      const handle = setTimeout(() => setPhase('steering'), INTER_CHUNK_COOLDOWN_MS);
       return () => clearTimeout(handle);
+    }
+
+    // 이미 이 인덱스로 카운트다운 중이면 리셋하지 않는다(새 턴 도착에 영향 없음).
+    if (scheduledIndexRef.current === revealedTurnCount && revealTimerRef.current) {
+      return;
     }
 
     const nextTurn = currentChunkTurns[revealedTurnCount];
     if (!nextTurn) return;
 
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    scheduledIndexRef.current = revealedTurnCount;
     const delay = readingTime(nextTurn.content) / speed;
-    const handle = setTimeout(() => {
+    revealTimerRef.current = setTimeout(() => {
+      revealTimerRef.current = null;
+      scheduledIndexRef.current = -1;
       // ⑤-5f-B — 발언 카드 등장 사운드 (우선순위: keypoint > question > intro > reveal)
       playSound(soundFor(nextTurn));
       setRevealedTurnCount((c) => c + 1);
     }, delay);
+  }, [
+    phase,
+    isPaused,
+    currentChunkTurns,
+    revealedTurnCount,
+    speed,
+    streamDone,
+    liveVersion,
+  ]);
 
-    return () => clearTimeout(handle);
-  }, [phase, isPaused, currentChunk, currentChunkTurns, revealedTurnCount, speed]);
+  // 언마운트 시 재생 타이머·생성 abort 정리.
+  useEffect(() => {
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      genAbortRef.current?.abort();
+    };
+  }, []);
 
   // revealedMessages: 이전 청크들의 모든 turn + 현재 청크의 revealed 만큼.
   const revealedMessages = useMemo<readonly Message[]>(() => {
@@ -464,16 +598,13 @@ export function useDebate(sessionId: string): UseDebateReturn {
         result.unshift(m); // 옛 메시지는 청크들 앞에 (시간순 가정)
       }
     }
-    if (currentChunk) {
-      const revealed = currentChunkTurns.slice(0, revealedTurnCount);
-      result.push(...revealed);
-      // steering 단계에서는 모든 턴이 드러난 상태로 본다
-      if (phase === 'steering' || phase === 'concluding' || phase === 'concluded') {
-        const all = currentChunkTurns;
-        // revealed 가 부족하면 채운다
-        for (const m of all) {
-          if (!result.includes(m)) result.push(m);
-        }
+    // 현재 청크(저장 완료) 또는 라이브 청크(스트리밍 중) — currentChunkTurns 가 분기.
+    const revealed = currentChunkTurns.slice(0, revealedTurnCount);
+    result.push(...revealed);
+    // steering/결론 단계에서는 모든 턴이 드러난 상태로 본다
+    if (phase === 'steering' || phase === 'concluding' || phase === 'concluded') {
+      for (const m of currentChunkTurns) {
+        if (!result.includes(m)) result.push(m);
       }
     }
     return result;
@@ -481,7 +612,6 @@ export function useDebate(sessionId: string): UseDebateReturn {
     safeChunks,
     safeMessages,
     currentChunkIndex,
-    currentChunk,
     currentChunkTurns,
     revealedTurnCount,
     phase,
@@ -576,6 +706,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
 
     pendingTopicRef.current = { topic: '_first', isFirst: true };
     setPhase('generating');
+    setGenTrigger((t) => t + 1);
   }, [cast, session, sessionId, appendMessage]);
 
   const play = useCallback(() => setIsPaused(false), []);
@@ -598,6 +729,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
       setError(null);
       pendingTopicRef.current = { topic: label, isFirst: false };
       setPhase('generating');
+      setGenTrigger((t) => t + 1);
     },
     [phase, safeChunks, currentChunkIndex, updateChunkChoice, sessionId],
   );

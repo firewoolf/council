@@ -48,6 +48,7 @@ export const personaSchema = z.object({
   nonNegotiable: z.string().min(1, '필수').max(200),
   weakness: z.string().min(1, '필수').max(200),
   systemPrompt: z.string().min(20, '최소 20자').max(4000),
+  voiceCard: z.string().max(1200).optional(),
   colorFrom: hexColor,
   colorTo: hexColor,
   userQuestions: z

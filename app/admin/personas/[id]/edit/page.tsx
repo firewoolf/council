@@ -48,6 +48,7 @@ export default function AdminPersonaEditPage({ params }: Props) {
     nonNegotiable: persona.nonNegotiable,
     weakness: persona.weakness,
     systemPrompt: persona.systemPrompt,
+    voiceCard: persona.voiceCard ?? '',
     colorFrom: persona.colorFrom,
     colorTo: persona.colorTo,
     userQuestions: [...persona.userQuestions],

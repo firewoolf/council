@@ -93,6 +93,8 @@ export interface Archetype {
   weakness: string;
   /** 손으로 쓴 캐릭터 프롬프트 (BASE 미포함 — 합성 시 prepend) */
   systemPrompt: string;
+  /** 청크 작가에게 주는 화법/프레임/금지 3줄 배역 노트 */
+  voiceCard?: string;
   /** orb 그라디언트 시작 (hex) */
   colorFrom: string;
   /** orb 그라디언트 끝 (hex) */
@@ -129,6 +131,8 @@ export interface CastMember {
   colorFrom: string;
   colorTo: string;
   characterPrompt?: string;
+  /** generated/custom 멤버의 생성 시점 보이스 카드 스냅샷 */
+  voiceCard?: string;
   /** 사회자 한 명은 자동 포함 — 발언 순번 결정 로직에서 분기. */
   isFacilitator?: boolean;
 }
