@@ -173,6 +173,7 @@ function convertTurn(
     createdAt: new Date().toISOString(),
     chunkId: ctx.chunkId,
     isKeyPoint: turn.isKeyPoint,
+    moveType: turn.moveType,
     ...(replyToMsgId ? { replyTo: replyToMsgId } : {}),
   };
 }

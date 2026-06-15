@@ -37,7 +37,7 @@ import {
   conclusionSchema,
   type Conclusion,
 } from '@/lib/prompts/orchestrator';
-import type { Message } from '@/types/debate';
+import type { Message, MoveType } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 import { PROVIDERS, type AiProvider } from './providers';
 import { AiCallError, classifyAiError } from './errors';
@@ -157,6 +157,14 @@ const chunkTurnSchema = z.object({
   isKeyPoint: z
     .boolean()
     .describe('이 청크에서 가장 날카로운 1~2개 라인이면 true, 아니면 false'),
+  moveType: z
+    .enum(['strike', 'counter', 'concede', 'escalate', 'probe'])
+    .describe(
+      'strike=새 논점 선공 / counter=앞 턴 반박(replyToIndex 필수) / ' +
+        'concede=부분 인정 후 재공격(replyToIndex 필수) / ' +
+        'escalate=같은 편 보강(replyToIndex 필수) / ' +
+        'probe=사용자나 패널에게 되돌리는 날카로운 질문',
+    ),
 });
 
 const nextTopicSchema = z.object({
@@ -243,11 +251,19 @@ export function sanitizeChunk(raw: Chunk): { chunk: Chunk; notes: string[] } {
   // turns 의 replyToIndex 무결성 — 자기 자신 이후를 가리키면 null 로.
   const turns = raw.turns.map((t, i) => {
     const r = t.replyToIndex;
-    if (r !== null && (r < 0 || r >= i)) {
+    const replyToIndex = r !== null && (r < 0 || r >= i) ? null : r;
+    if (r !== replyToIndex) {
       notes.push(`turn ${i}.replyToIndex=${r} 무효 → null 로 보정`);
-      return { ...t, replyToIndex: null };
     }
-    return { ...t };
+    const requiresReply =
+      t.moveType === 'counter' ||
+      t.moveType === 'concede' ||
+      t.moveType === 'escalate';
+    const moveType = requiresReply && replyToIndex === null ? 'strike' : t.moveType;
+    if (moveType !== t.moveType) {
+      notes.push(`turn ${i}.moveType=${t.moveType} 대상 없음 → strike 로 강등`);
+    }
+    return { ...t, replyToIndex, moveType };
   });
 
   return { chunk: { turns, nextTopics }, notes };
@@ -284,7 +300,7 @@ export async function generateChunk(args: {
       temperature: TEMPERATURE.speech,
       maxRetries: 1,
       // P-A-2 장면 비트가 3~5턴 구조를 충분히 완결할 수 있도록 안전 마진을 둔다.
-      maxTokens: 1800,
+      maxTokens: 1900,
     });
     const { chunk } = sanitizeChunk(object);
     return chunk;
@@ -306,17 +322,30 @@ function normalizeStreamTurn(
     message?: string;
     replyToIndex?: number | null;
     isKeyPoint?: boolean;
+    moveType?: MoveType;
   },
   index: number,
 ): ChunkTurn {
   const r = t.replyToIndex;
   const replyToIndex =
     typeof r === 'number' && r >= 0 && r < index ? r : null;
+  const moveType =
+    t.moveType === 'counter' ||
+    t.moveType === 'concede' ||
+    t.moveType === 'escalate' ||
+    t.moveType === 'probe'
+      ? t.moveType
+      : 'strike';
+  const requiresReply =
+    moveType === 'counter' ||
+    moveType === 'concede' ||
+    moveType === 'escalate';
   return {
     speakerName: t.speakerName ?? '',
     message: t.message ?? '',
     replyToIndex,
     isKeyPoint: t.isKeyPoint ?? false,
+    moveType: requiresReply && replyToIndex === null ? 'strike' : moveType,
   };
 }
 
@@ -365,7 +394,7 @@ export async function streamChunk(args: {
       }),
       temperature: TEMPERATURE.speech,
       maxRetries: 0,
-      maxTokens: 1800,
+      maxTokens: 1900,
       abortSignal,
     });
 

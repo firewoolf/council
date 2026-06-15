@@ -161,6 +161,14 @@ ${transcriptBlock}
   역할로 쓴다. 사회자는 중재하되 무르지 않는다.
 - 가장 날카로운 1~2개 발언에 isKeyPoint: true.
 
+[수(手) 선언 — moveType]
+모든 턴은 moveType 을 단다. 이 장면이 '치고받기'가 되려면 strike 만 나열하지 말 것:
+- 입장이 갈리면 한 명이 counter(앞 발언의 *구체적 표현*을 집어 반박)로 받아쳐라.
+- 일부 인정 후 다시 가르려면 concede.
+- 같은 편을 더 미는 escalate.
+- 사용자/패널에게 날카롭게 되묻는 한 수는 probe.
+counter·concede·escalate 는 replyToIndex 로 대상 턴을 가리켜라.
+
 [다음 갈림길 — nextTopics]
 장면이 끝났으면, 사용자가 다음에 파고들 소주제 후보를 2~4개 제안한다.
 이게 이 제품의 핵심이다 — 후보가 뻔하면 사용자는 메뉴를 무시하고, 조향 경험이
@@ -225,13 +233,18 @@ export function buildConclusionPrompt(
   pinnedMessages: readonly Message[] = [],
 ): string {
   const personaMap = Object.fromEntries(cast.map((m) => [m.id, m]));
+  const messageIndexById = new Map(messages.map((m, index) => [m.id, index]));
 
   // 각 발언에 message id 부착 — evidenceMessageIds 참조용.
   const fullHistory = messages
     .map((m) => {
       if (m.speakerId === null) return `[사용자 (id:${m.id})] ${m.content}`;
       const persona = personaMap[m.speakerId];
-      return `[${persona?.name ?? '???'} (id:${m.id})] ${m.content}`;
+      const replyIndex = m.replyTo ? messageIndexById.get(m.replyTo) : undefined;
+      const moveType = m.moveType
+        ? ` <${m.moveType}${replyIndex !== undefined ? `→${replyIndex}` : ''}>`
+        : '';
+      return `[${persona?.name ?? '???'} (id:${m.id})${moveType}] ${m.content}`;
     })
     .join('\n');
 
@@ -305,6 +318,13 @@ divided 의 각 position 에 evidenceMessageIds 를 채운다 — 그 입장을 
 발언의 (id:xxx) 를 [전체 토론 내용]에서 골라 0~3개. 실재하는 id 만. 근거가
 명확한 발언이 없으면 빈 배열. *지어내지 마라* — 없는 id 를 채우면 추적이 거짓이
 된다.
+
+[수(手)로 결론 빌드 — moveType 활용]
+- divided(끝내 갈린 것): counter·concede 가 몰린 지점이 진짜 분기다. 각 position 의
+  evidenceMessageIds 는 그 입장을 *방어/반격한 counter·concede 턴*을 우선 채워라.
+- openQuestions: probe 턴이 던진 질문을 최우선 후보로 삼아라(있으면).
+- consensus: 누구의 counter 도 받지 않은 strike(선 주장)가 합의 후보다.
+- escalate 가 한쪽에 몰리면 그 입장의 memberIds 에 보강 멤버를 포함하라.
 
 [언어 — 박제, 이 블록 수정 금지]
 consensus · divided.topic · divided.positions.side · openQuestions 등 모든

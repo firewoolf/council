@@ -34,6 +34,8 @@ export interface Session {
  */
 export type MessageKind = 'speech' | 'instruction' | 'intro' | 'user-choice';
 
+export type MoveType = 'strike' | 'counter' | 'concede' | 'escalate' | 'probe';
+
 export interface Message {
   id: string;
   sessionId: string;
@@ -52,6 +54,8 @@ export interface Message {
   chunkId?: string;
   /** 트랙 ⑤-1 — 이 청크에서 가장 날카로운 1~2개 라인이면 true. */
   isKeyPoint?: boolean;
+  /** P-B′ — 결정 지도 입력으로 쓰는 발언의 수(手). 옛 청크는 undefined. */
+  moveType?: MoveType;
 }
 
 /**
