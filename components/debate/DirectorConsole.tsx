@@ -1,18 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, MessageSquarePlus } from 'lucide-react';
+import { Loader2, MessageSquarePlus, Pin } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { DebateControls } from './DebateControls';
 import { NextDirections } from './NextDirections';
+import { PinBoard } from './PinBoard';
 import { SpeechComposer } from './SpeechComposer';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { playSound } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 import type { DebatePhase, PlaybackSpeed } from '@/hooks/useDebate';
-import type { ChunkMeta } from '@/types/debate';
+import type { ChunkMeta, Message } from '@/types/debate';
+import type { Pin as PinType } from '@/types/debate';
+import type { CastMember } from '@/types/persona';
 
 interface DirectorConsoleProps {
   phase: DebatePhase;
@@ -30,6 +33,12 @@ interface DirectorConsoleProps {
   onPause: () => void;
   onSetSpeed: (s: PlaybackSpeed) => void;
   onSkipTurn: () => void;
+  /** I-2 — 핀 보드 데이터. */
+  pins?: PinType[];
+  messages?: readonly Message[];
+  cast?: readonly CastMember[];
+  onTogglePin?: (messageId: string) => void;
+  onSetPinNote?: (messageId: string, note: string) => void;
 }
 
 /**
@@ -57,6 +66,11 @@ export function DirectorConsole({
   onPause,
   onSetSpeed,
   onSkipTurn,
+  pins = [],
+  messages = [],
+  cast = [],
+  onTogglePin,
+  onSetPinNote,
 }: DirectorConsoleProps) {
   const isSteering = phase === 'steering' && currentChunk !== null;
   const speechActive =
@@ -92,6 +106,30 @@ export function DirectorConsole({
             내 발언
           </h2>
           <SpeechComposer onSubmit={onSubmitSpeech} />
+        </section>
+      )}
+
+      {/* ④ 핀 보드 — I-2 */}
+      {onTogglePin && (
+        <section className="flex flex-col gap-2">
+          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-text-muted">
+            <Pin className="size-3" />
+            핀
+            {pins.length > 0 && (
+              <span className="ml-auto rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-bold text-accent">
+                {pins.length}
+              </span>
+            )}
+          </h2>
+          <div className="max-h-56 overflow-y-auto">
+            <PinBoard
+              pins={pins}
+              messages={messages}
+              cast={cast}
+              onTogglePin={onTogglePin}
+              onSetNote={onSetPinNote ?? (() => {})}
+            />
+          </div>
         </section>
       )}
 

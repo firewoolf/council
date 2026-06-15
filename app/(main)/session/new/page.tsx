@@ -6,13 +6,14 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 
+import { ConcernClarify } from '@/components/session/ConcernClarify';
 import { ConcernInput } from '@/components/session/ConcernInput';
 import {
   PersonaPicker,
   type CustomPersonaInput,
 } from '@/components/session/PersonaPicker';
 import { Button } from '@/components/ui/button';
-import { designPanel } from '@/lib/ai/client';
+import { clarifyConcern, designPanel } from '@/lib/ai/client';
 import { AiCallError } from '@/lib/ai/errors';
 import {
   BYOK_PROVIDERS,
@@ -31,12 +32,13 @@ import {
   synthesizeCharacterPrompt,
   synthesizeVoiceCard,
 } from '@/lib/prompts/synthesize';
+import { composeConcern, type ClarifyQuestion } from '@/lib/prompts/concern-shaping';
 import { useApiKeyStore } from '@/store/api-key';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import type { CastMember, Lens, Trait } from '@/types/persona';
 
-type Step = 'input' | 'analyzing' | 'picking';
+type Step = 'input' | 'clarifying' | 'analyzing' | 'picking';
 
 /**
  * 새 회의 시작 흐름.
@@ -54,6 +56,8 @@ export default function NewSessionPage() {
 
   const [step, setStep] = useState<Step>('input');
   const [concern, setConcern] = useState('');
+  const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
+  const [clarifyLoading, setClarifyLoading] = useState(false);
   const [cast, setCast] = useState<CastMember[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [domain, setDomain] = useState<string | null>(null);
@@ -125,6 +129,44 @@ export default function NewSessionPage() {
       }
     },
     [setProvider],
+  );
+
+  /** I-1 — "AI와 다듬기" 클릭 시 역질문 생성. 실패 시 analyzing 직행. */
+  const handleClarify = useCallback(
+    async (text: string): Promise<void> => {
+      const state = useApiKeyStore.getState();
+      const available = listAvailableProviders(state.keys);
+      if (available.length === 0) {
+        toast.error('API 키가 필요합니다. 설정 페이지에서 먼저 등록해주세요.');
+        return;
+      }
+      setConcern(text);
+      setClarifyLoading(true);
+      setStep('clarifying');
+      try {
+        const result = await clarifyConcern({
+          provider: state.provider ?? available[0]!,
+          apiKey: state.keys[state.provider ?? available[0]!] ?? '',
+          concern: text,
+        });
+        setClarifyQuestions(result.questions);
+      } catch {
+        toast.info('역질문 생성 실패 — 바로 시작합니다.');
+        void handleAnalyze(text);
+      } finally {
+        setClarifyLoading(false);
+      }
+    },
+    [handleAnalyze],
+  );
+
+  /** I-1 — "이대로 토론 시작": answers → composeConcern → analyzing. */
+  const handleClarifySubmit = useCallback(
+    (answers: { question: string; answer: string }[]) => {
+      const composed = composeConcern(concern, answers);
+      void handleAnalyze(composed);
+    },
+    [concern, handleAnalyze],
   );
 
   const handleRemove = useCallback((memberId: string) => {
@@ -272,7 +314,17 @@ export default function NewSessionPage() {
         <ConcernInput
           busy={false}
           defaultValue={concern}
+          onClarify={handleClarify}
           onSubmit={handleAnalyze}
+        />
+      )}
+      {step === 'clarifying' && (
+        <ConcernClarify
+          rawConcern={concern}
+          questions={clarifyQuestions}
+          loading={clarifyLoading}
+          onSubmit={handleClarifySubmit}
+          onSkip={() => void handleAnalyze(concern)}
         />
       )}
       {step === 'analyzing' && (

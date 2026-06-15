@@ -6,9 +6,11 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   CheckCircle2,
+  GitBranch,
   HelpCircle,
   ListChecks,
   MessageSquare,
+  Pin,
   TriangleAlert,
   Users,
   Zap,
@@ -21,6 +23,7 @@ import { useHasMounted } from '@/hooks/useHasMounted';
 import { playSound } from '@/lib/sound';
 import { useSessionsStore } from '@/store/sessions';
 import type { Conclusion, DividedPoint } from '@/lib/prompts/orchestrator';
+import type { ChunkMeta, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
 /**
@@ -41,10 +44,21 @@ export default function SessionSummaryPage() {
   const session = useSessionsStore((s) => s.sessions[id]);
   const conclusion = useSessionsStore((s) => s.conclusions[id]);
   const cast = useSessionsStore((s) => s.sessionCast?.[id] ?? []);
+  const messages = useSessionsStore((s) => s.messages[id] ?? []);
+  const pins = useSessionsStore((s) => s.pins?.[id] ?? []);
+  const chunks = useSessionsStore((s) => s.sessionChunks?.[id] ?? []);
 
   const castMap = useMemo(
     () => new Map(cast.map((c) => [c.id, c])),
     [cast],
+  );
+  const messageMap = useMemo(
+    () => new Map(messages.map((m) => [m.id, m])),
+    [messages],
+  );
+  const pinnedMessageIds = useMemo(
+    () => new Set(pins.map((p) => p.messageId)),
+    [pins],
   );
 
   useEffect(() => {
@@ -90,8 +104,15 @@ export default function SessionSummaryPage() {
         </h1>
       </div>
 
+      <RouteView chunks={chunks} concernTitle={session.title} />
+
       {isV2 ? (
-        <DecisionMapView conclusion={conclusion} castMap={castMap} />
+        <DecisionMapView
+          conclusion={conclusion}
+          castMap={castMap}
+          messageMap={messageMap}
+          pinnedMessageIds={pinnedMessageIds}
+        />
       ) : (
         <LegacyConclusionView conclusion={conclusion} castMap={castMap} />
       )}
@@ -117,6 +138,8 @@ export default function SessionSummaryPage() {
 interface DecisionMapViewProps {
   conclusion: Conclusion;
   castMap: Map<string, CastMember>;
+  messageMap: Map<string, Message>;
+  pinnedMessageIds: Set<string>;
 }
 
 /**
@@ -127,7 +150,7 @@ interface DecisionMapViewProps {
  *   openQuestions:  border primary/30, 중간 폰트
  *   consensus:      border-dashed, 작은 폰트, muted 톤
  */
-function DecisionMapView({ conclusion, castMap }: DecisionMapViewProps) {
+function DecisionMapView({ conclusion, castMap, messageMap, pinnedMessageIds }: DecisionMapViewProps) {
   const consensus = conclusion.consensus ?? [];
   const divided = conclusion.divided ?? [];
   const openQuestions = conclusion.openQuestions ?? [];
@@ -174,7 +197,13 @@ function DecisionMapView({ conclusion, castMap }: DecisionMapViewProps) {
         </p>
         <div className="flex flex-col gap-4">
           {divided.map((point, i) => (
-            <DividedCard key={i} point={point} castMap={castMap} />
+            <DividedCard
+              key={i}
+              point={point}
+              castMap={castMap}
+              messageMap={messageMap}
+              pinnedMessageIds={pinnedMessageIds}
+            />
           ))}
         </div>
       </section>
@@ -214,45 +243,249 @@ function DecisionMapView({ conclusion, castMap }: DecisionMapViewProps) {
 interface DividedCardProps {
   point: DividedPoint;
   castMap: Map<string, CastMember>;
+  messageMap: Map<string, Message>;
+  pinnedMessageIds: Set<string>;
 }
 
 /**
  * 갈림 지점 카드 — 부록 B.2 레이아웃 그대로.
- * 각 입장을 그리드 2열(데스크탑) / 세로 적재(모바일) 로 표시.
- * 입장마다 어느 멤버가 그쪽 편인지 PersonaOrb + 이름 칩.
+ * v2.1: 각 입장 하단에 evidenceMessageIds 근거 칩 렌더. 핀된 발언은 핀 아이콘 표시.
  */
-function DividedCard({ point, castMap }: DividedCardProps) {
+function DividedCard({ point, castMap, messageMap, pinnedMessageIds }: DividedCardProps) {
   return (
     <section className="rounded-2xl border-2 border-accent/40 bg-accent/5 p-5">
       <h3 className="text-base font-bold text-text">{point.topic}</h3>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        {point.positions.map((pos, j) => (
-          <div
-            key={j}
-            className="rounded-xl border border-border bg-surface p-3"
-          >
-            <p className="text-sm font-semibold text-text">{pos.side}</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {pos.memberIds.map((memberId) => {
-                const m = castMap.get(memberId);
-                if (!m) return null;
-                return (
-                  <span
-                    key={memberId}
-                    className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text/90"
-                    style={{ borderLeft: `3px solid ${m.colorTo}` }}
-                  >
-                    <PersonaOrb persona={m} size={14} glow="none" />
-                    {m.name}
-                  </span>
-                );
-              })}
-              {pos.memberIds.length === 0 && (
-                <span className="text-[10px] text-text-muted">멤버 미지정</span>
+        {point.positions.map((pos, j) => {
+          const evidenceIds = pos.evidenceMessageIds ?? [];
+          const evidenceMsgs = evidenceIds
+            .map((eid) => messageMap.get(eid))
+            .filter((m): m is Message => m !== undefined && m.speakerId !== null);
+
+          return (
+            <div
+              key={j}
+              className="rounded-xl border border-border bg-surface p-3"
+            >
+              <p className="text-sm font-semibold text-text">{pos.side}</p>
+              {/* 멤버 칩 */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {pos.memberIds.map((memberId) => {
+                  const m = castMap.get(memberId);
+                  if (!m) return null;
+                  return (
+                    <span
+                      key={memberId}
+                      className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-text/90"
+                      style={{ borderLeft: `3px solid ${m.colorTo}` }}
+                    >
+                      <PersonaOrb persona={m} size={14} glow="none" />
+                      {m.name}
+                    </span>
+                  );
+                })}
+                {pos.memberIds.length === 0 && (
+                  <span className="text-[10px] text-text-muted">멤버 미지정</span>
+                )}
+              </div>
+              {/* I-3 v2.1 — 근거 칩 */}
+              {evidenceMsgs.length > 0 && (
+                <div className="mt-2.5 flex flex-col gap-1.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-text-muted/70">
+                    근거
+                  </p>
+                  {evidenceMsgs.map((m) => {
+                    const speaker = m.speakerId ? castMap.get(m.speakerId) : null;
+                    const isPinned = pinnedMessageIds.has(m.id);
+                    const preview =
+                      m.content.length > 40
+                        ? `${m.content.slice(0, 38)}…`
+                        : m.content;
+                    return (
+                      <div
+                        key={m.id}
+                        className="flex items-start gap-1.5 rounded-lg border border-border/60 bg-background/60 px-2 py-1.5"
+                      >
+                        {speaker && (
+                          <PersonaOrb persona={speaker} size={16} glow="none" className="mt-0.5 shrink-0" />
+                        )}
+                        <p className="min-w-0 flex-1 text-[11px] leading-snug text-text/80">
+                          {preview}
+                        </p>
+                        {isPinned && (
+                          <Pin className="size-3 shrink-0 text-accent" />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+// ─── R-3': 항로 뷰 ────────────────────────────────────────────────────────────
+
+function topicLabel(topic: string): string {
+  if (topic === '_first') return '오프닝';
+  return topic.length > 24 ? `${topic.slice(0, 22)}…` : topic;
+}
+
+interface RouteViewProps {
+  chunks: readonly ChunkMeta[];
+  concernTitle: string;
+}
+
+function RouteView({ chunks, concernTitle }: RouteViewProps) {
+  if (chunks.length === 0) return null;
+
+  const sorted = [...chunks].sort((a, b) =>
+    a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0,
+  );
+  const last = sorted[sorted.length - 1];
+  const lastHasChoice = last?.chosenNextLabel !== undefined;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <GitBranch className="size-5 text-primary" />
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-primary">
+          내가 항해한 길
+        </h2>
+      </div>
+      <p className="text-xs text-text-muted">이번 회의에서 당신이 고른 갈림길들.</p>
+
+      <div className="flex flex-col">
+        {/* 고민 루트 */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex w-5 shrink-0 justify-center">
+            <div className="size-2.5 rounded-full bg-text-muted/40" />
           </div>
-        ))}
+          <span className="text-xs text-text-muted">{concernTitle}</span>
+        </div>
+
+        {sorted.map((chunk, i) => {
+          const isLast = i === sorted.length - 1;
+          const chosen = chunk.chosenNextLabel;
+          const isDirectInput =
+            chosen !== undefined &&
+            !chunk.nextTopics.some((t) => t.label === chosen);
+
+          return (
+            <div key={chunk.id}>
+              {/* 연결선 */}
+              <div className="flex">
+                <div className="flex w-5 justify-center py-1">
+                  <div className="w-px flex-1 bg-border" />
+                </div>
+              </div>
+
+              {/* 장면 노드 */}
+              <div className="flex items-start gap-2.5">
+                <div className="flex w-5 shrink-0 flex-col items-center pt-0.5">
+                  <div className="size-2.5 rounded-full bg-primary/70 ring-2 ring-primary/20" />
+                </div>
+                <div className="flex-1 pb-0.5">
+                  <span className="inline-block rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                    {topicLabel(chunk.topic)}
+                  </span>
+
+                  {/* 갈림길 후보 목록 */}
+                  {chunk.nextTopics.length > 0 && (
+                    <ul className="mt-2 flex flex-col gap-1 pl-2 border-l border-border/60 ml-1">
+                      {chunk.nextTopics.map((t, j) => {
+                        const isChosen = t.label === chosen;
+                        const isBlindSpot = t.isBlindSpot;
+
+                        if (isChosen) {
+                          return (
+                            <li key={j} className="flex items-start gap-1.5">
+                              <span className="mt-0.5 shrink-0 text-xs text-primary">▶</span>
+                              <div>
+                                <span className="text-sm font-semibold text-primary">
+                                  {isBlindSpot && (
+                                    <span className="mr-1 text-accent">✦</span>
+                                  )}
+                                  {t.label}
+                                </span>
+                                {isBlindSpot && (
+                                  <span className="ml-1.5 text-[11px] text-accent">
+                                    못 본 각도를 택함
+                                  </span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        }
+
+                        // 안 고른 후보
+                        return (
+                          <li key={j} className="flex items-start gap-1.5 text-text-muted/50">
+                            <span className="mt-0.5 shrink-0 text-xs">─</span>
+                            <div>
+                              {isBlindSpot ? (
+                                <>
+                                  <span className="text-xs">
+                                    <span className="mr-1 text-accent/40">✦</span>
+                                    안 가본 각도: {t.label}
+                                  </span>
+                                  <p className="mt-0.5 text-[11px] text-text-muted/40 italic">
+                                    {t.hook}
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="text-xs">안 가본 길: {t.label}</span>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+
+                      {/* 직접 입력 선택 */}
+                      {isDirectInput && chosen && (
+                        <li className="flex items-start gap-1.5">
+                          <span className="mt-0.5 shrink-0 text-xs text-primary">▶</span>
+                          <div>
+                            <span className="text-sm font-semibold text-primary">{chosen}</span>
+                            <span className="ml-1.5 text-[11px] text-text-muted">직접 입력한 길</span>
+                          </div>
+                        </li>
+                      )}
+                    </ul>
+                  )}
+
+                  {/* 마지막 청크 + 선택 없음 → 결론 인라인 마킹 */}
+                  {isLast && !chosen && (
+                    <p className="mt-1.5 text-[11px] italic text-text-muted/70">
+                      → 여기서 결론
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* 마지막 청크가 선택까지 있으면 결론 마감 노드 */}
+        {lastHasChoice && (
+          <>
+            <div className="flex">
+              <div className="flex w-5 justify-center py-1">
+                <div className="w-px flex-1 bg-border" />
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="flex w-5 shrink-0 justify-center">
+                <div className="size-2.5 rounded-full bg-accent/60 ring-2 ring-accent/20" />
+              </div>
+              <span className="text-xs font-medium text-text-muted">결론</span>
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

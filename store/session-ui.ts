@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 
-type SheetKind = 'none' | 'memberDrawer' | 'bgPicker' | 'steeringSheet';
+type SheetKind = 'none' | 'memberDrawer' | 'bgPicker' | 'steeringSheet' | 'pinBoard';
 
 interface SessionUiState {
   sheet: SheetKind;
@@ -10,6 +10,7 @@ interface SessionUiState {
   openMemberDrawer: (id: string) => void;
   openBgPicker: () => void;
   openSteeringSheet: () => void;
+  openPinBoard: () => void;
   closeSheet: () => void;
 }
 
@@ -20,5 +21,6 @@ export const useSessionUiStore = create<SessionUiState>((set) => ({
   openBgPicker: () => set({ sheet: 'bgPicker', selectedMemberId: null }),
   openSteeringSheet: () =>
     set({ sheet: 'steeringSheet', selectedMemberId: null }),
+  openPinBoard: () => set({ sheet: 'pinBoard', selectedMemberId: null }),
   closeSheet: () => set({ sheet: 'none', selectedMemberId: null }),
 }));

@@ -33,6 +33,10 @@ interface DebateFeedProps {
   speed?: PlaybackSpeed;
   onAdvance?: () => void;
   onSelectMember?: (memberId: string) => void;
+  /** I-2 — 핀된 메시지 ID 집합. */
+  pinnedIds?: ReadonlySet<string>;
+  /** I-2 — 핀 토글 콜백. */
+  onTogglePin?: (messageId: string) => void;
   scrollContainerRef?: React.RefObject<HTMLElement | null>;
 }
 
@@ -66,6 +70,8 @@ export function DebateFeed({
   speed = 1,
   onAdvance,
   onSelectMember,
+  pinnedIds,
+  onTogglePin,
   scrollContainerRef,
 }: DebateFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -262,10 +268,12 @@ export function DebateFeed({
                   cast={cast}
                   onDirect={onDirect}
                   onSelectMember={onSelectMember}
+                  isPinned={pinnedIds?.has(m.id) ?? false}
+                  onTogglePin={onTogglePin}
                   isLatest={
-                    phase === 'playing' &&
                     m.id === latestMessageId &&
-                    m.speakerId !== null
+                    ((phase === 'playing' && m.speakerId !== null) ||
+                      ((phase === 'playing' || phase === 'generating') && m.kind === 'user-choice'))
                   }
                   isActive={m.speakerId === activeSpeakerId}
                   speed={speed}

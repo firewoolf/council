@@ -7,6 +7,14 @@
 > 선행 문서: `workorder-stage-R1-consolidation.md`(출하분 위에 작업), `workorder-debate-5-6-streaming.md`
 > 선행 상태: **P-A-1 + R-1 + R-2a 커밋 후 착수.** 본 워크오더는 R-2b(§E·§F)를 흡수·대체한다 — R-2b는 별도 진행하지 않는다.
 
+> ⚠️ **갱신 (2026-06-10, `meeting-2026-06-10-content-pivot.md`): R-1.5a는 출하 완료. R-1.5b는 무대 패널을 폐기하는 R-1.5b′로 대체한다.**
+> - **무대 패널(StagePanel/DebateStage) 폐기** — 인사이트 기여 0, 화자 식별은 피드 카드로 충분. 아래 §A·B·G의 "무대 패널/StagePanel" 항목은 **만들지 않는다.**
+> - 웹 레이아웃: 3패널 → **2단** `grid-cols-1 lg:grid-cols-[1fr_360px]` (좌: 피드 꽉 채움 / 우: DirectorConsole). `xl` 3패널 분기 삭제.
+> - 인물 연출은 피드 카드 아바타·시그니처(첫 발언)·사운드로 일원화. `lg~xl` "컴팩트 스피커 밴드"(§B)도 만들지 않는다 — 카드 아바타로 충분.
+> - DirectorConsole(§A ①②③)·DebateFeed 스크롤 컨테이너화(§D)·공유 컴포넌트 소비는 그대로 유효.
+> - `public/personas/portraits`·`backgrounds` 자산은 카드 아바타/드로어에서 계속 쓰이므로 삭제 금지 — *무대 렌더 경로만* 제거.
+> - DebateStage가 잔존하면 page.tsx의 `lg:block` 무대 블록·BackgroundPicker 진입점을 함께 정리. 배경 선택은 2단에서 의미가 줄어드니 콘솔 부가 메뉴 또는 제거(운영자 판단).
+
 ---
 
 ## 0. 한 줄 목표

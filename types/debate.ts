@@ -29,9 +29,10 @@ export interface Session {
  *   - instruction: 사용자의 메타 지시 ("더 짧게", "다른 시각으로"). speakerId는 null.
  *     이후 모든 페르소나 발언이 이 지시를 반영해야 한다.
  *   - intro: ⑤-5e — 사회자 모두 발언. 토론 시작 시 즉시 표시. LLM 호출 없음.
+ *   - user-choice: 갈림길 hook — 사용자의 선택을 발언으로 변환. R-2d 글자단위 타이핑 대상.
  *     undefined / 'speech' 는 모두 일반 발언으로 렌더 (마이그레이션 무중단).
  */
-export type MessageKind = 'speech' | 'instruction' | 'intro';
+export type MessageKind = 'speech' | 'instruction' | 'intro' | 'user-choice';
 
 export interface Message {
   id: string;
@@ -82,6 +83,19 @@ export interface SessionPersona {
   personaId: string;
   isActive: boolean;
   joinedAt: string; // ISO
+}
+
+/**
+ * I-2 — 사용자가 중요하다고 마킹한 발언.
+ * 메시지는 불변 — 핀은 별도 세션별 집합으로 분리 저장.
+ * 핀 본문·note 는 I-3 결론 프롬프트의 우선 입력이 된다.
+ */
+export interface Pin {
+  messageId: string;
+  sessionId: string;
+  /** 사용자가 핀에 단 한 줄 메모 ("이게 진짜 리스크") */
+  note?: string;
+  createdAt: string; // ISO
 }
 
 /**

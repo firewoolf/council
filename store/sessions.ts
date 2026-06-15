@@ -5,7 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 
 import type { Conclusion } from '@/lib/prompts/orchestrator';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
-import type { ChunkMeta, Message, Session } from '@/types/debate';
+import type { ChunkMeta, Message, Pin, Session } from '@/types/debate';
 import type { Archetype, CastMember, Trait } from '@/types/persona';
 
 /**
@@ -37,6 +37,10 @@ interface SessionsState {
    * turn 본문은 그대로 messages 에 평면 저장. 여기엔 topic·nextTopics·chosenNext 만.
    */
   sessionChunks?: Record<string, ChunkMeta[]>;
+  /**
+   * I-2 — 세션별 핀 집합. 가산적 필드 — 없으면 ?? [] 폴백(마이그레이션 무중단).
+   */
+  pins?: Record<string, Pin[]>;
 
   createSession: (input: {
     concern: string;
@@ -73,6 +77,13 @@ interface SessionsState {
     chunkId: string,
     chosenNextLabel: string,
   ) => void;
+
+  /** I-2 — 핀 토글 (있으면 제거, 없으면 추가). */
+  togglePin: (sessionId: string, messageId: string) => void;
+  /** I-2 — 핀에 메모 결합 (핀 없으면 무시). */
+  setPinNote: (sessionId: string, messageId: string, note: string) => void;
+  /** I-2 — 세션의 핀 목록. */
+  getPins: (sessionId: string) => Pin[];
 
   /** 결론 저장 시 status를 concluded로 자동 전환 */
   saveConclusion: (sessionId: string, conclusion: Conclusion) => void;
@@ -205,6 +216,7 @@ export const useSessionsStore = create<SessionsState>()(
       domains: {},
       conclusions: {},
       sessionChunks: {},
+      pins: {},
 
       createSession: ({ concern, title, cast, aiProvider, domain }) => {
         const id = generateId();
@@ -235,6 +247,33 @@ export const useSessionsStore = create<SessionsState>()(
       getMessages: (id) => get().messages[id] ?? [],
       getConclusion: (id) => get().conclusions[id] ?? null,
       getChunks: (id) => get().sessionChunks?.[id] ?? [],
+      getPins: (id) => get().pins?.[id] ?? [],
+
+      togglePin: (sessionId, messageId) =>
+        set((s) => {
+          const prev = s.pins?.[sessionId] ?? [];
+          const exists = prev.some((p) => p.messageId === messageId);
+          const next = exists
+            ? prev.filter((p) => p.messageId !== messageId)
+            : [
+                ...prev,
+                {
+                  messageId,
+                  sessionId,
+                  createdAt: new Date().toISOString(),
+                },
+              ];
+          return { pins: { ...(s.pins ?? {}), [sessionId]: next } };
+        }),
+
+      setPinNote: (sessionId, messageId, note) =>
+        set((s) => {
+          const prev = s.pins?.[sessionId] ?? [];
+          const next = prev.map((p) =>
+            p.messageId === messageId ? { ...p, note } : p,
+          );
+          return { pins: { ...(s.pins ?? {}), [sessionId]: next } };
+        }),
 
       saveConclusion: (sessionId, conclusion) =>
         set((s) => {
@@ -324,6 +363,8 @@ export const useSessionsStore = create<SessionsState>()(
           delete nextConclusions[id];
           const nextChunks = { ...(s.sessionChunks ?? {}) };
           delete nextChunks[id];
+          const nextPins = { ...(s.pins ?? {}) };
+          delete nextPins[id];
           return {
             sessions: nextSessions,
             sessionCast: nextCast,
@@ -331,6 +372,7 @@ export const useSessionsStore = create<SessionsState>()(
             domains: nextDomains,
             conclusions: nextConclusions,
             sessionChunks: nextChunks,
+            pins: nextPins,
           };
         }),
 

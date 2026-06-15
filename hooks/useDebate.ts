@@ -118,6 +118,7 @@ const FIRST_GENERATING_DELAY_MS = 150;
 // PHASE_TRANSITION_TAIL_MS (옛 600ms) 를 대체.
 const INTER_CHUNK_COOLDOWN_MS = 1500;
 const EMPTY_CAST: readonly CastMember[] = Object.freeze([]);
+const EMPTY_PINS: readonly import('@/types/debate').Pin[] = Object.freeze([]);
 
 /** ⑤-5f-B — 발언 메시지의 사운드 이벤트 우선순위 결정. */
 function soundFor(msg: Message): SoundEvent {
@@ -215,6 +216,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const messages = useSessionsStore((s) => s.messages[sessionId]);
   const chunks = useSessionsStore((s) => s.sessionChunks?.[sessionId]);
   const conclusion = useSessionsStore((s) => s.conclusions[sessionId]);
+  const pins = useSessionsStore((s) => s.pins?.[sessionId] ?? EMPTY_PINS);
   const appendMessage = useSessionsStore((s) => s.appendMessage);
   const addChunk = useSessionsStore((s) => s.addChunk);
   const updateChunkChoice = useSessionsStore((s) => s.updateChunkChoice);
@@ -267,6 +269,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
   /** 라이브 큐 리셋 — 생성 시작·폴백 재연출·에러 시. */
   const resetLiveQueue = useCallback(() => {
     liveTurnsRef.current = [];
+    userUtteranceGateRef.current = null;
     setRevealedTurnCount(0);
     setStreamDone(false);
     setLiveVersion((v) => v + 1);
@@ -524,6 +527,9 @@ export function useDebate(sessionId: string): UseDebateReturn {
   // 묶으면 매 턴 도착마다 타이머가 초기화돼 첫 턴 등장이 생성 완료까지 밀린다(R-2 무력화).
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scheduledIndexRef = useRef<number>(-1);
+  // R-2d — hook(user-choice) 타이핑이 끝날 때까지 첫 턴 reveal 을 막는 게이트.
+  // null = 비활성. { until: ms } = until 시각까지 턴 0 대기.
+  const userUtteranceGateRef = useRef<{ until: number } | null>(null);
 
   useEffect(() => {
     const clearReveal = () => {
@@ -551,6 +557,21 @@ export function useDebate(sessionId: string): UseDebateReturn {
     // 이미 이 인덱스로 카운트다운 중이면 리셋하지 않는다(새 턴 도착에 영향 없음).
     if (scheduledIndexRef.current === revealedTurnCount && revealTimerRef.current) {
       return;
+    }
+
+    // R-2d 게이트 — post-branch 첫 턴(0번)은 hook 타이핑이 끝날 때까지 대기.
+    if (revealedTurnCount === 0 && userUtteranceGateRef.current) {
+      const remain = userUtteranceGateRef.current.until - Date.now();
+      if (remain > 0) {
+        revealTimerRef.current = setTimeout(() => {
+          revealTimerRef.current = null;
+          userUtteranceGateRef.current = null;
+          // effect 재실행 — liveVersion bump 로 트리거
+          setLiveVersion((v) => v + 1);
+        }, remain);
+        return;
+      }
+      userUtteranceGateRef.current = null;
     }
 
     const nextTurn = currentChunkTurns[revealedTurnCount];
@@ -594,10 +615,11 @@ export function useDebate(sessionId: string): UseDebateReturn {
         if (m.chunkId === c.id) result.push(m);
       }
     }
-    // 청크 이전 옛 평면 메시지(있다면) 도 포함 — 마이그레이션 무중단
+    // 청크 없는 메시지(intro·사용자 발언·hook utterance) — push 후 마지막에 정렬.
+    // unshift(→ 항상 맨 앞) 대신 createdAt 기준 sort 로 올바른 위치에 삽입.
     for (const m of safeMessages) {
       if (!m.chunkId && !result.includes(m)) {
-        result.unshift(m); // 옛 메시지는 청크들 앞에 (시간순 가정)
+        result.push(m);
       }
     }
     // 현재 청크(저장 완료) 또는 라이브 청크(스트리밍 중) — currentChunkTurns 가 분기.
@@ -609,7 +631,9 @@ export function useDebate(sessionId: string): UseDebateReturn {
         if (!result.includes(m)) result.push(m);
       }
     }
-    return result;
+    // createdAt 기준 정렬 — hook utterance 등 flat 메시지가 올바른 청크 사이에 위치.
+    // DebateFeed 도 동일 정렬을 하지만 revealedMessages 단에서도 보장해 순서 역전 0.
+    return result.sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
   }, [
     safeChunks,
     safeMessages,
@@ -643,6 +667,9 @@ export function useDebate(sessionId: string): UseDebateReturn {
               concern: session.concern,
               messages: safeMessages,
               cast,
+              pinnedMessages: pins.length > 0
+                ? safeMessages.filter((m) => pins.some((p) => p.messageId === m.id))
+                : undefined,
             }),
           {
             onFallback: (from, to) => {
@@ -717,30 +744,50 @@ export function useDebate(sessionId: string): UseDebateReturn {
 
   const skipTurn = useCallback(() => {
     if (phase !== 'playing') return;
+    // R-2d — 탭으로 hook 스킵 시 게이트 즉시 해제.
+    userUtteranceGateRef.current = null;
     setRevealedTurnCount((c) =>
       Math.min(c + 1, currentChunkTurns.length),
     );
   }, [phase, currentChunkTurns.length]);
 
   const chooseTopic = useCallback(
-    (label: string, _hook?: string) => {
-      void _hook;
+    (label: string, hook?: string) => {
       if (phase !== 'steering') return;
       const last = safeChunks[currentChunkIndex];
       if (last) updateChunkChoice(sessionId, last.id, label);
       setError(null);
+
+      // R-2 rev2 §G — hook 을 사용자 발언으로 변환.
+      // appendMessage 가 동기 store 갱신이므로 setGenTrigger 전 호출 = 순서 역전 0 보장.
+      // DebateFeed 는 createdAt 으로 정렬하므로 hook 카드가 다음 청크 발언 앞에 온다.
+      if (hook?.trim()) {
+        const hookText = hook.trim();
+        appendMessage(sessionId, {
+          id: generateId(),
+          sessionId,
+          speakerId: null,
+          content: hookText,
+          createdAt: new Date().toISOString(),
+          kind: 'user-choice',
+        });
+        // R-2d 게이트 무장 — hook 타이핑 시간(speed 반영)만큼 첫 턴 대기.
+        userUtteranceGateRef.current = { until: Date.now() + readingTime(hookText) / speed };
+      }
+
       pendingTopicRef.current = { topic: label, isFirst: false };
       setPhase('generating');
       setGenTrigger((t) => t + 1);
     },
-    [phase, safeChunks, currentChunkIndex, updateChunkChoice, sessionId],
+    [phase, safeChunks, currentChunkIndex, updateChunkChoice, sessionId, appendMessage],
   );
 
   const submitCustomTopic = useCallback(
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      chooseTopic(trimmed);
+      // 직접입력은 label=본문, hook=동일 텍스트로 user-choice 카드 + 게이트 무장.
+      chooseTopic(trimmed, trimmed);
     },
     [chooseTopic],
   );

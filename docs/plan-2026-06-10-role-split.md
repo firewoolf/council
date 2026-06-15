@@ -95,11 +95,23 @@ R-3' 출하 후 Fable이 설계 재개. 항로 데이터가 누적 프로필의 
 
 ## 워크오더 발행 순서 (Fable 산출물 큐)
 
-1. `workorder-prompt-A-voicecard.md` — P-A (부록 A~D 박제 포함) ← **즉시 착수 가능, R-1과 병행**
-2. `workorder-stage-R1-consolidation.md` — R-1
-3. `workorder-debate-5-6-streaming.md` — R-2 (Opus 직접 구현 지시 명기)
-4. `workorder-prompt-B-movetype.md` — P-B
-5. `workorder-route-view.md` — R-3'
+> ⚠️ 아래 1~5는 2026-06-10 *콘텐츠 피벗 이전* 큐다. 피벗(`meeting-2026-06-10-content-pivot.md`)으로 P-B·R-3'는 동결, 인사이트 트랙 I가 선행. 현재 활성 큐는 하단 **발행 현황(2026-06-14)** 참조.
+
+1. `workorder-prompt-A-voicecard.md` — P-A (부록 A~D 박제 포함) ✅ 발행·구현 완료
+2. `workorder-stage-R1-consolidation.md` — R-1 ✅ 발행·구현 완료(피벗으로 무대 폐기 후속)
+3. `workorder-debate-5-6-streaming.md` — R-2 ✅ 발행, R-2a 구현(미커밋). **rev2(2026-06-14) 추가** — 분기 경계 프리페치 §G
+4. `workorder-prompt-B-movetype.md` — P-B ❄️ 보여주기 동결
+5. `workorder-route-view.md` — R-3' ❄️ 보여주기 동결
+
+## 발행 현황 (2026-06-14, Fable 인계자)
+
+활성 발행 큐 — 우선순위 순:
+
+1. **`workorder-prompt-language-lock.md`** — 출력 언어 락 ★발행 완료, **Sonnet 즉시 착수 가능(독립·저위험)**
+   실기기 검증에서 나온 확정 수정사항. 결론/청크 제목 영어 혼용·✦ 마커 차단. 프롬프트 텍스트 삽입만.
+2. `workorder-debate-5-6-streaming.md` **rev2 §G** — 분기 경계 프리페치 + 사용자 발언화
+   R-2c(Opus, chooseTopic 게이트) / R-2d(Sonnet, 사용자 발언 카드 + 피드 TypewriterText 재바인딩). R-2a(미커밋) 위에 적층.
+3. 인사이트 트랙 I-1~I-3 + R-1.5b′ — ✅ 구현 완료(미커밋), 운영자 실기기 1회 검증함. 트랙별 분리 커밋 권고.
 
 ## 역할 경계 요약
 

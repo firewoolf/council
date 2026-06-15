@@ -191,3 +191,111 @@ return chunk;
 R-2a:  [선택] ── 3~5s ── [턴1 등장]…(생성은 배후 계속)…[턴N] ── 갈림길
 R-2b:  [선택] ── 3~5s ── [턴1 타이핑▌]…                       ── 갈림길
 ```
+
+---
+
+# rev2 (2026-06-14) — 분기 경계 프리페치 + 사용자 발언화
+
+> 작성: Fable 역할 인계자. 트리거: 콘텐츠 피벗(무대 폐기, R-1.5b′) 이후 + David 구두 명세 — "배치로 받지만 화면엔 한 명씩, 갈림길 결정은 사용자 프로필 발언으로 보여주고 그 쓰는 시간 동안 다음 라운드를 백그라운드로 돌려 대기시간을 번다."
+> 이 섹션은 위 본문(R-2a/b)을 **대체하지 않고 두 가지를 더한다**: ① 본문을 피벗 후 화면(무대→피드)으로 재바인딩 ② 분기 경계 프리페치(§G) 신설.
+
+## R-0. 정합화 — David 아이디어 중 이미 박제된 것
+
+David 아이디어 (A) "토론 참가자가 한 명씩 얘기하듯, reveal 시간으로 토큰 쿨타임을 번다" = **본문 §3-A·B·C가 청크 *내부*에서 이미 구현**한다. streamObject가 턴을 확정 즉시 `liveTurnsRef` 큐에 넣고(생성), 재생 엔진은 readingTime으로 큐를 소비(공개)한다 — 생성·재생 비결합 두 큐는 이미 존재한다(useDebate.ts `liveTurnsRef` + streamObject). **여기에 새로 만들 것은 없다.** R-2a는 작업 트리에 구현 완료(미커밋) 상태.
+
+David 아이디어 (B) "갈림길 결정을 사용자 발언으로 → 그 발언 쓰는 동안 다음 라운드 프리페치" = **미구현. §G가 이번 추가분.** 청크 *내부* 프리페치는 있으나, **청크 *경계*(갈림길 선택 → 다음 청크) 프리페치는 없다** — `chooseTopic`(useDebate.ts:730)이 선택 즉시 `setPhase('generating')`으로 가며 그 사이를 빈 대기로 둔다. 이 빈 구간을 사용자 발언 reveal로 덮고, 그 reveal 시간을 다음 청크 생성 윈도우로 쓴다.
+
+## R-0b. 피벗 재바인딩 (본문 §3-C·E 갱신)
+
+콘텐츠 피벗으로 무대(DebateStage)는 폐기됐다(`meeting-2026-06-10-content-pivot.md`). 본문의 무대 의존 부분을 피드 표면으로 재바인딩한다:
+- §3-E "DebateStage 대사 박스 → TypewriterText" → **피드 최신 카드(MessageCard) 본문에 TypewriterText 적용.**
+- "무대 'thinking' 상태" 큐 공백 연출 → **피드 하단 'thinking' 카드/비트**(다음 발언 준비 — orb 맥동). 새 모션 금지.
+- 화면 = 피드 + 디렉터 콘솔 2단 전제(R-1.5b′). 그 외 §3-A·B·C·D·F는 무대와 무관 — 무수정.
+
+## G. 분기 경계 프리페치 + 사용자 발언 카드 (신설) ★Opus(게이트) / Sonnet(카드 UI)
+
+### G-1. chooseTopic 흐름 전환 — `hooks/useDebate.ts:730`
+
+현행:
+```
+steering ─[chooseTopic]→ setPhase('generating') ─(빈 대기)─→ 첫 턴 ─→ playing
+```
+전환:
+```
+steering ─[chooseTopic]→ ① 사용자 발언 Message 피드에 append + 타이핑 reveal 시작
+                         ② 동시에 streamChunk 트리거 (백그라운드 — 생성·발언 병렬)
+                         ③ 사용자 발언 reveal 완료 후에만 다음 청크 첫 턴 재생
+```
+
+- **병렬 트리거**: ①과 ②를 같은 콜백에서 동시에. 생성을 사용자 발언 reveal *완료*까지 기다리지 말 것(그러면 윈도우 0).
+- **재생 게이트**: `liveTurnsRef`는 백그라운드에서 채워지되, 재생 effect의 다음 청크 첫 턴 소비는 `userUtteranceRevealed === true`를 게이트로 둔다. (사용자 발언 도중 첫 턴이 확정돼도 큐에 쌓아만 둠.)
+- **순서 보장**: 사용자 발언 reveal 완료 전 첫 턴 도착 → 버퍼링만. 완료 후 즉시 첫 턴 이어 재생. **역전 0건이 합격선.**
+- **폴백 비트**: 사용자 발언 reveal 끝났는데 첫 턴 미도착 → 본문 §3-C의 'thinking' 대기 연출 재사용(피드 하단 비트). min-duration으로 깜빡임 방지.
+- **이상 케이스**: 생성이 사용자 발언 reveal보다 빠르면 'thinking' 비트는 *아예 안 뜬다* — 이게 정상 동작이고 목표다.
+
+### G-2. 사용자 발언 Message — 데이터 계약
+
+**의도(David 2026-06-14)**: 사용자 발언은 단순 라벨 에코가 아니다. 사용자가 *고른 토픽을 회의실 맥락에서 정제해 설명*하는 한 마디다 — "내가 이 길을 고른 이유는 …". 겉모습은 회의 진행의 자연스러운 연결, **속내는 그 발언을 타이핑하는 시간으로 백그라운드 LLM(다음 청크) 생성 대기를 버는 것.**
+
+- **본문 = 기존 `hook` 재사용 (추가 LLM 호출 0)**: nextTopics는 각 갈림길 후보에 `label`(짧은 제목)과 `hook`("왜 지금 이걸 파야 하는지" 한 줄, 방금 장면의 충돌을 가리킴)을 *이미 생성해 들고 있다*(orchestrator.ts buildChunkPrompt:175~176). 그리고 `chooseTopic(label, _hook)`은 지금 그 `hook`을 받아 `void _hook`으로 **버리고 있다**(useDebate.ts:732). → 이 `hook`을 사용자 발언 본문으로 살린다. 즉시 손에 있으므로 0초·0토큰, 정제 품질은 이미 검증된 nextTopics 카피라이팅 그대로.
+  - 렌더 틀(예): `"{label} — {hook}"` 또는 `"이 길로 가보죠: {hook}"`. 1차는 hook 그대로, 어드민/카피 톤은 후속.
+  - 직접입력(`submitCustomTopic`) 경로는 hook이 없다 → label(사용자 입력문) 자체를 발언 본문으로.
+- **화자: 사용자 프로필.** **확인 필요** — `submitSpeech`(useDebate.ts:758)에 이미 "토론 중 사용자 발언" kind·speakerId 규약이 있으면 재사용. 없으면 `kind: 'user-choice'` 신설(아바타=사용자, speakerId=null — 결론 프롬프트가 이미 `speakerId === null`을 "[사용자]"로 처리함, orchestrator.ts:222).
+- **무결성**: 본문 §2-1 원칙 준수 — 저장은 다음 청크 완성 시점 일괄(`appendMessage`)과 같은 트랜잭션 또는 그 직전. 스트림 중 새로고침 시 사용자 발언+미완성 청크가 함께 사라져도 회귀 아님(half-state 0).
+- `updateChunkChoice`(현행, useDebate.ts:735) 호출은 유지 — 항로(R-3') 데이터.
+- **타이밍 보장**: hook이 짧으면(한 줄) reveal 시간이 다음 청크 생성보다 짧을 수 있다 → 그때만 §G-1 'thinking' 비트가 받친다. hook이 충분히 길면 비트 없이 매끄럽게 첫 턴으로 이어진다. (발언 길이가 곧 마스킹 윈도우 — 너무 짧으면 윈도우 부족, 어드민 카피로 조절 가능.)
+
+### G-3. 비결합 두 큐 — 원칙 재확인
+
+revealQueue(`liveTurnsRef`, 손에 든 카드)와 생성 인플라이트(streamChunk Promise, 주문한 다음 접시)를 **한 상태/한 await에 묶지 말 것.** 묶으면 "배치로 한꺼번에 뱉는 느낌"으로 회귀 — 이 트랙 전체가 막으려는 바로 그 증상. 청크 내부(본문)와 청크 경계(§G) 모두 동일 원칙.
+
+## 합격 지표 추가 (rev2)
+
+| 지표 | 합격선 |
+| --- | --- |
+| 갈림길 선택 → 사용자 발언 카드 등장 | 즉시 (0 dead wait — 선택 직후 프레임) |
+| 사용자 발언 reveal 종료 → 다음 청크 첫 턴 | 끊김 청크당 1회 이하 (이상 시 0회) |
+| 사용자 발언 ↔ 다음 청크 순서 역전 | 0건 |
+| 분기 경계 빈 대기(빈 화면/스피너) 노출 | 0건 (사용자 발언이 항상 덮음) |
+
+## 출하 단위 (rev2)
+
+- **R-2c (Opus)**: §G-1 chooseTopic 게이트 + 재생 effect 순서 보장 (useDebate 심장부). **구현 완료(2026-06-14, 미커밋)** — hook→사용자 발언 append + revealedMessages createdAt 정렬. 위치(순서 역전 0)·0 dead wait 달성.
+- **R-2d (Sonnet)**: 피드 카드 글자단위 reveal 레이어(패널 턴+hook 카드 일관) + reveal 게이트(첫 턴은 hook reveal 완료 후) + 큐 공백 thinking 비트. **판정(2026-06-14, Fable): 한다.** R-2c는 *위치*만 잡았고, R-2d가 reveal *지속시간 = 마스킹 윈도우*를 만들어 §G 목적("써주는 시간 동안 대기 절감")을 완성한다. 즉시 표시는 "빈 화면 0"만 푼 절반 상태.
+
+## 비범위 (rev2)
+
+- **언어 락** — 결론/요약 영어 혼용("통 Through?", "✦ 자격 미달 THEN?")은 buildConclusionPrompt 프롬프트 픽스로 **별도 추적**. 본 트랙과 무관.
+- moveType(P-B)·항로 뷰(R-3')·⑤-5 게임화 — 보여주기 동결 유지.
+
+## 부록 D — §G 게이트 의사코드 (박제)
+
+```ts
+// chooseTopic (useDebate.ts:730 전환)
+const chooseTopic = useCallback((label, hook) => {   // ← hook 더 이상 void 하지 않음
+  if (phase !== 'steering') return;
+  const last = safeChunks[currentChunkIndex];
+  if (last) updateChunkChoice(sessionId, last.id, label);   // 항로 데이터 (현행 유지)
+
+  // ① 사용자 발언 — 즉시 피드 등장 + 타이핑 reveal. 본문 = 정제된 hook (0토큰)
+  appendUserUtterance({ kind: 'user-choice', speakerId: null,
+                        content: hook ? hook : label });    // 직접입력은 hook 없음 → label
+  userUtteranceRevealedRef.current = false;
+
+  // ② 동시에 백그라운드 생성 (발언 reveal과 병렬 — 핵심)
+  pendingTopicRef.current = { topic: label, isFirst: false };
+  setPhase('generating');
+  setGenTrigger((t) => t + 1);
+}, [phase, safeChunks, currentChunkIndex, updateChunkChoice, sessionId]);
+
+// 재생 effect 게이트: 다음 청크 첫 턴은 사용자 발언이 다 드러난 뒤에만 소비
+// if (isNextChunkFirstTurn && !userUtteranceRevealedRef.current) return; // 버퍼만
+// 사용자 발언 reveal 완료 콜백 → userUtteranceRevealedRef = true → 재생 재개
+```
+
+## 부록 E — §G 체감 타임라인 (목표)
+
+```text
+현행:  [갈림길 선택] ──── 3~5s 빈 대기 ──── [다음 청크 턴1]…
+rev2:  [갈림길 선택] → [나의 발언 타이핑▌ 3~5s](배후에서 다음 청크 생성)→ [턴1 끊김없이]…
+```

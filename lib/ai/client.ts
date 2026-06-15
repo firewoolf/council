@@ -26,6 +26,11 @@ import {
   type PanelDesign,
 } from '@/lib/prompts/recommender';
 import {
+  buildClarifyPrompt,
+  clarifyQuestionsSchema,
+  type ClarifyQuestions,
+} from '@/lib/prompts/concern-shaping';
+import {
   buildConclusionPrompt,
   buildChunkPrompt,
   CHUNK_SYSTEM_PROMPT,
@@ -450,7 +455,60 @@ export async function designPanel(args: {
 }
 
 /**
+ * I-1 — 역질문 생성.
+ * raw concern 한 줄 → 2~3개 역질문. 실패 시 AiCallError throw (호출자가 스킵 폴백).
+ */
+export async function clarifyConcern(args: {
+  provider: AiProvider;
+  apiKey: string;
+  concern: string;
+}): Promise<ClarifyQuestions> {
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: clarifyQuestionsSchema,
+      prompt: buildClarifyPrompt(args.concern),
+      temperature: TEMPERATURE.recommend,
+      maxRetries: 1,
+      maxTokens: 600,
+    });
+    return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
+}
+
+/**
+ * I-3 §D — 결론 sanitize.
+ * - evidenceMessageIds: transcript에 없는 id 드롭 (환각 차단).
+ * - memberIds: cast에 없는 id 드롭.
+ * - 빈 배열·누락은 허용.
+ */
+function sanitizeConclusion(
+  conclusion: Conclusion,
+  messageIds: Set<string>,
+  castIds: Set<string>,
+): Conclusion {
+  if (!conclusion.divided) return conclusion;
+  return {
+    ...conclusion,
+    divided: conclusion.divided.map((point) => ({
+      ...point,
+      positions: point.positions.map((pos) => ({
+        ...pos,
+        memberIds: pos.memberIds.filter((id) => castIds.has(id)),
+        evidenceMessageIds: (pos.evidenceMessageIds ?? []).filter((id) =>
+          messageIds.has(id),
+        ),
+      })),
+    })),
+  };
+}
+
+/**
  * 토론 종료 시 결론 생성.
+ * pinnedMessages: I-2 핀된 발언 — 결론 프롬프트 우선 가중 입력 (I-3).
  */
 export async function generateConclusion(args: {
   provider: AiProvider;
@@ -458,17 +516,25 @@ export async function generateConclusion(args: {
   concern: string;
   messages: readonly Message[];
   cast: readonly CastMember[];
+  pinnedMessages?: readonly Message[];
 }): Promise<Conclusion> {
   try {
     const model = getModel(args.provider, args.apiKey);
     const { object } = await generateObject({
       model,
       schema: conclusionSchema,
-      prompt: buildConclusionPrompt(args.concern, args.messages, args.cast),
+      prompt: buildConclusionPrompt(
+        args.concern,
+        args.messages,
+        args.cast,
+        args.pinnedMessages ?? [],
+      ),
       temperature: TEMPERATURE.conclusion,
       maxRetries: 1,
     });
-    return object;
+    const messageIds = new Set(args.messages.map((m) => m.id));
+    const castIds = new Set(args.cast.map((c) => c.id));
+    return sanitizeConclusion(object, messageIds, castIds);
   } catch (err) {
     throw classifyAiError(args.provider, err);
   }

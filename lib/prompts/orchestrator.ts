@@ -20,12 +20,19 @@ import type { CastMember } from '@/types/persona';
 /**
  * 트랙 ② — 결정 지도 갈림 지점.
  * 패널이 끝내 합의하지 못한 핵심 분기. 각 입장마다 어느 멤버인지 명시.
+ *
+ * v2.1 (I-3): evidenceMessageIds 추가 — 옵셔널로 하위호환 유지.
  */
 export interface DividedPoint {
   /** 갈린 지점의 주제 한 줄 */
   topic: string;
   /** 각 입장 — 어느 멤버가 어느 쪽인지 */
-  positions: { side: string; memberIds: string[] }[];
+  positions: {
+    side: string;
+    memberIds: string[];
+    /** I-3 v2.1 — 이 입장의 근거가 된 발언 message id. 없으면 undefined. */
+    evidenceMessageIds?: string[];
+  }[];
 }
 
 /**
@@ -74,6 +81,12 @@ export const conclusionSchema = z.object({
             z.object({
               side: z.string().describe('이 쪽 입장 한 줄'),
               memberIds: z.array(z.string()).describe('이 입장의 멤버 id 들'),
+              evidenceMessageIds: z
+                .array(z.string())
+                .describe(
+                  '이 입장의 근거가 된 발언 id. [전체 토론 내용]에 붙은 (id:xxx) 에서 가져온다. ' +
+                    '0~3개. 없으면 빈 배열. *지어내지 마라* — 없는 id 를 채우면 추적이 거짓이 된다.',
+                ),
             }),
           )
           .min(2)
@@ -100,8 +113,10 @@ export const CHUNK_SYSTEM_PROMPT: string = promptsJson.chunkSystemPrompt;
 /**
  * 트랙 ⑤-1 부록 C·D — 청크 user 프롬프트.
  *
- * 워크오더 부록 C 의 본문 + 부록 D 의 nextTopics 지시 를 그대로 조립.
- * 임의 수정 금지.
+ * ⚠️ 박제 원문 — 임의 수정 금지.
+ * 무수정 범위: buildChunkPrompt 반환 템플릿 리터럴 전체.
+ *   수정 허용: 함수 인자 추가(옵셔널 확장), 템플릿 변수값(panelLines·topicLine·transcriptBlock).
+ *   수정 금지: 프롬프트 텍스트 내용·순서·[언어] 블록.
  */
 export function buildChunkPrompt(args: {
   concern: string;
@@ -162,6 +177,10 @@ ${transcriptBlock}
 - label 은 짧은 제목(15자 내외). hook 은 "왜 지금 이걸 파야 하는지" 한 줄 —
   방금 장면의 어떤 충돌을 가리키며 쓴다.
 
+[언어 — 박제, 이 블록 수정 금지]
+turns.message · nextTopics.label · nextTopics.hook 등 모든 텍스트 필드를
+반드시 한국어로 출력하라. 영어 단어·혼용 금지.
+
 좋은 예 (고민: "지금 유료 전환을 할까"):
 - label: "공짜 사용자 이탈을 감당할 수 있나"
   hook: "투자자는 전환을 밀었지만, 개발자가 말한 '이탈 40%'에 아무도 답하지 않았다"
@@ -190,29 +209,57 @@ nextTopics 가 4개 일 때 그중 1개는 반드시 *사용자가 생각도 못
 }
 
 /**
- * 트랙 ② — 결정 지도형 결론 프롬프트.
+ * I-3 v2.1 — 결정 지도형 결론 프롬프트.
  *
- * ⚠️ Opus 박제 — 부록 A 원문 그대로. Sonnet 임의 수정 금지.
- * 굴복 금지·강제 수렴 금지 가드가 본문 안에 포함돼 있다.
+ * ⚠️ Fable 박제 — 부록 A 원문 그대로. Sonnet 임의 수정 금지.
+ * 굴복 금지·강제 수렴 금지 가드 유지. 추가분: message id 부착, 핀 블록, 근거 추적.
+ *
+ * 무수정 범위: buildConclusionPrompt 함수 본문 전체.
+ *   수정 허용: 함수 시그니처 인자 추가(pinnedMessages 등 옵셔널 확장), 템플릿 변수값.
+ *   수정 금지: 프롬프트 텍스트 내용·순서·[언어] 블록·[금지 사항] 블록.
  */
 export function buildConclusionPrompt(
   concern: string,
   messages: readonly Message[],
   cast: readonly CastMember[],
+  pinnedMessages: readonly Message[] = [],
 ): string {
   const personaMap = Object.fromEntries(cast.map((m) => [m.id, m]));
+
+  // 각 발언에 message id 부착 — evidenceMessageIds 참조용.
   const fullHistory = messages
     .map((m) => {
-      if (m.speakerId === null) return `[사용자] ${m.content}`;
+      if (m.speakerId === null) return `[사용자 (id:${m.id})] ${m.content}`;
       const persona = personaMap[m.speakerId];
-      return `[${persona?.name ?? '???'} (id:${m.speakerId})] ${m.content}`;
+      return `[${persona?.name ?? '???'} (id:${m.id})] ${m.content}`;
     })
     .join('\n');
 
-  // 멤버 id ↔ 이름 매핑을 명시 — divided.positions.memberIds 가 정확한 id 를 채우도록.
+  // 멤버 id ↔ 이름 매핑 — divided.positions.memberIds 가 정확한 id 를 채우도록.
   const memberDirectory = cast
     .map((m) => `- id: "${m.id}" / 이름: "${m.name}"`)
     .join('\n');
+
+  // 핀 블록 — pinnedMessages 있을 때만 삽입.
+  const pinBlock =
+    pinnedMessages.length > 0
+      ? `\n[사용자가 직접 표시한 핵심 발언 — 결론에서 우선 가중]\n${pinnedMessages
+          .map((m) => {
+            const name = m.speakerId ? (personaMap[m.speakerId]?.name ?? '???') : '사용자';
+            return `(id:${m.id}) [${name}] ${m.content}`;
+          })
+          .join('\n')}
+사용자가 이 발언들을 *직접* 중요하다고 표시했다. consensus·divided·openQuestions
+를 뽑을 때 이 발언들이 가리키는 논점을 우선 반영하라. 단, 핀이 곧 정답은
+아니다 — 핀된 주장이 토론에서 반박당했다면 그 갈림을 divided 에 박제하라.
+
+[핀과 갈림의 관계]
+- 핀된 발언이 합의 영역이면 → consensus 로.
+- 핀된 발언이 반박당했으면 → 그 충돌을 divided 로 박제하고, 핀 발언을 한 입장의
+  근거로 단다. "사용자가 중요하다고 본 것이 사실은 갈린 지점이었다" 는 가장 값진
+  인사이트다 — 숨기지 마라.
+`
+      : '';
 
   return `[원본 고민]
 ${concern}
@@ -222,7 +269,7 @@ ${memberDirectory}
 
 [전체 토론 내용]
 ${fullHistory}
-
+${pinBlock}
 [작업 — 결정 지도형 결론]
 당신은 사회자입니다. 이 토론을 정리하되, *판결* 이 아니라 *결정 지도* 를 만듭니다.
 사용자가 직접 결정할 수 있도록 *재료* 를 분류해 제시하세요.
@@ -244,14 +291,24 @@ ${fullHistory}
    {
      topic: "수의사 친구 1명을 자산으로 볼까 부채로 볼까",
      positions: [
-       { side: "현장 검증 채널 (자산)", memberIds: ["domain-vet"] },
-       { side: "1명은 표본이 아닌 친밀감 함정", memberIds: ["jobs-designer", "realist"] }
+       { side: "현장 검증 채널 (자산)", memberIds: ["domain-vet"], evidenceMessageIds: ["msg-id-1"] },
+       { side: "1명은 표본이 아닌 친밀감 함정", memberIds: ["jobs-designer", "realist"], evidenceMessageIds: ["msg-id-2", "msg-id-3"] }
      ]
    }
 
 (3) openQuestions — *당신이 답해야 할 질문*
    패널이 사용자에게 되돌린 질문. 답에 따라 결론이 바뀌는 *분기 조건*.
    2~4개. 교과서적 일반론 금지 — *이 고민에만 들어맞는* 질문.
+
+[근거 추적 — divided 각 입장]
+divided 의 각 position 에 evidenceMessageIds 를 채운다 — 그 입장을 뒷받침한
+발언의 (id:xxx) 를 [전체 토론 내용]에서 골라 0~3개. 실재하는 id 만. 근거가
+명확한 발언이 없으면 빈 배열. *지어내지 마라* — 없는 id 를 채우면 추적이 거짓이
+된다.
+
+[언어 — 박제, 이 블록 수정 금지]
+consensus · divided.topic · divided.positions.side · openQuestions 등 모든
+텍스트 필드를 반드시 한국어로 출력하라. 영어 단어·혼용 금지.
 
 [금지 사항]
 - 강제 수렴 금지. divided 가 0개면 안 된다. 갈린 지점이 *반드시 있다*.

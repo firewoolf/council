@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Flag,
+  Pin,
   Trash2,
   Volume2,
   VolumeX,
@@ -21,14 +22,13 @@ import { DebateControls } from '@/components/debate/DebateControls';
 import { DebateFeed } from '@/components/debate/DebateFeed';
 import { DirectorConsole } from '@/components/debate/DirectorConsole';
 import { PersonaDetailDrawer } from '@/components/debate/PersonaDetailDrawer';
-import { StagePanel } from '@/components/debate/StagePanel';
+import { PinBoard } from '@/components/debate/PinBoard';
 import { SteeringSheet } from '@/components/debate/SteeringSheet';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { useDebate } from '@/hooks/useDebate';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { isMuted, setMuted } from '@/lib/sound';
-import { SIGNATURE_LINES } from '@/lib/prompts/personas';
 import { DEFAULT_BACKGROUND_ID } from '@/lib/stage/backgrounds';
 import { useSessionUiStore } from '@/store/session-ui';
 import { useSessionsStore } from '@/store/sessions';
@@ -53,6 +53,10 @@ export default function SessionRoomPage() {
   const domain = useSessionsStore((s) => s.domains[id] ?? null);
   const conclusion = useSessionsStore((s) => s.conclusions[id] ?? null);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
+  const rawPins = useSessionsStore((s) => s.pins?.[id] ?? []);
+  const togglePin = useSessionsStore((s) => s.togglePin);
+  const setPinNote = useSessionsStore((s) => s.setPinNote);
+  const pinnedIds = useMemo(() => new Set(rawPins.map((p) => p.messageId)), [rawPins]);
 
   const {
     phase,
@@ -74,8 +78,8 @@ export default function SessionRoomPage() {
   const sheet = useSessionUiStore((s) => s.sheet);
   const selectedMemberId = useSessionUiStore((s) => s.selectedMemberId);
   const openMemberDrawer = useSessionUiStore((s) => s.openMemberDrawer);
-  const openBgPicker = useSessionUiStore((s) => s.openBgPicker);
   const openSteeringSheet = useSessionUiStore((s) => s.openSteeringSheet);
+  const openPinBoard = useSessionUiStore((s) => s.openPinBoard);
   const closeSheet = useSessionUiStore((s) => s.closeSheet);
   const backgroundId = useStageStore((s) => s.backgroundBySession[id]) ?? DEFAULT_BACKGROUND_ID;
 
@@ -93,23 +97,6 @@ export default function SessionRoomPage() {
         : [],
     [selectedMemberId, revealedMessages],
   );
-
-  // ⑤-5h — 무대 화자/모드/대사 파생
-  const stageSpeaker =
-    activeSpeakerId ? (cast.find((c) => c.id === activeSpeakerId) ?? null)
-    : thinkingMemberId ? (cast.find((c) => c.id === thinkingMemberId) ?? null)
-    : null;
-  const stageMode: 'speaking' | 'thinking' | 'idle' | 'concluded' =
-    phase === 'concluded'
-      ? 'concluded'
-      : activeSpeakerId
-        ? 'speaking'
-        : thinkingMemberId
-          ? 'thinking'
-          : 'idle';
-  const stageSig =
-    stageMode === 'speaking' && stageSpeaker?.source === 'archetype' && stageSpeaker.archetypeId
-      ? SIGNATURE_LINES[stageSpeaker.archetypeId] : undefined;
 
   /** 웹 패널 모드 — 중앙 피드 자체 스크롤 컨테이너. */
   const feedScrollRef = useRef<HTMLDivElement>(null);
@@ -147,10 +134,7 @@ export default function SessionRoomPage() {
   }
 
   return (
-    <div
-      className="flex flex-col gap-4 pb-52 pt-2 lg:pb-0"
-      style={{ backgroundImage: 'var(--stage-bg)' }}
-    >
+    <div className="flex flex-col gap-4 pb-52 pt-2 lg:pb-0">
       {/* 상단 행 — 홈 링크 + mute 토글 */}
       <div className="flex items-center justify-between">
         <Link
@@ -287,46 +271,18 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* 웹 패널 (lg+) — 부모 max-w-2xl 를 탈출한 full-bleed 3/2 패널 그리드.
-          무대(인물) · 라이브 피드(텍스트, 자체 스크롤) · 디렉터 콘솔(조향)을
-          한 시야에 두어 "보면서 동시에 조향"한다. */}
+      {/* 웹 패널 (lg+) — full-bleed 2단 그리드.
+          라이브 피드(자체 스크롤) + 디렉터 콘솔(조향)을 한 시야에 둔다. */}
       <div
         className={cn(
           'hidden lg:grid lg:gap-4',
-          'lg:grid-cols-[1fr_340px] xl:grid-cols-[300px_1fr_340px]',
-          'lg:ml-[calc(50%-50vw)] lg:w-screen lg:px-4 xl:px-6',
+          'lg:grid-cols-[1fr_360px]',
+          'lg:ml-[calc(50%-50vw)] lg:w-screen lg:px-4',
           'lg:sticky lg:top-2 lg:h-[calc(100dvh-1rem)]',
         )}
       >
-        {/* 무대 패널 — xl 전용 (full) */}
-        <aside className="hidden min-h-0 xl:block">
-          <StagePanel
-            variant="full"
-            cast={cast}
-            speaker={stageSpeaker}
-            mode={stageMode}
-            signatureLine={stageSig}
-            backgroundId={backgroundId}
-            onSelectMember={openMemberDrawer}
-            onOpenBackground={openBgPicker}
-          />
-        </aside>
-
-        {/* 라이브 피드 (중앙) — 자체 스크롤 컨테이너 */}
+        {/* 라이브 피드 (좌측) — 자체 스크롤 컨테이너 */}
         <div className="flex min-h-0 flex-col gap-3">
-          {/* 2패널(lg)에서만 컴팩트 스피커 밴드 */}
-          <div className="xl:hidden">
-            <StagePanel
-              variant="compact"
-              cast={cast}
-              speaker={stageSpeaker}
-              mode={stageMode}
-              signatureLine={stageSig}
-              backgroundId={backgroundId}
-              onSelectMember={openMemberDrawer}
-              onOpenBackground={openBgPicker}
-            />
-          </div>
           <div
             ref={feedScrollRef}
             className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-surface/30 p-4"
@@ -342,6 +298,8 @@ export default function SessionRoomPage() {
               onAdvance={actions.skipTurn}
               onSelectMember={openMemberDrawer}
               onDirect={actions.submitDirection}
+              pinnedIds={pinnedIds}
+              onTogglePin={(msgId) => togglePin(id, msgId)}
               scrollContainerRef={feedScrollRef}
               emptyHint={
                 phase === 'idle'
@@ -370,6 +328,11 @@ export default function SessionRoomPage() {
             onPause={actions.pause}
             onSetSpeed={actions.setSpeed}
             onSkipTurn={actions.skipTurn}
+            pins={rawPins}
+            messages={revealedMessages}
+            cast={cast}
+            onTogglePin={(msgId) => togglePin(id, msgId)}
+            onSetPinNote={(msgId, note) => setPinNote(id, msgId, note)}
           />
         </aside>
       </div>
@@ -387,6 +350,8 @@ export default function SessionRoomPage() {
           onAdvance={actions.skipTurn}
           onSelectMember={openMemberDrawer}
           onDirect={actions.submitDirection}
+          pinnedIds={pinnedIds}
+          onTogglePin={(msgId) => togglePin(id, msgId)}
           emptyHint={
             phase === 'idle'
               ? '토론 시작을 누르면 이곳에 대화가 이어집니다.'
@@ -411,6 +376,17 @@ export default function SessionRoomPage() {
             onSetSpeed={actions.setSpeed}
             onSkipTurn={actions.skipTurn}
           />
+          {/* I-2 — 모바일 핀 칩 */}
+          {rawPins.length > 0 && (
+            <button
+              type="button"
+              onClick={openPinBoard}
+              className="flex w-fit items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-semibold text-accent"
+            >
+              <Pin className="size-3" />
+              핀 {rawPins.length} ▲
+            </button>
+          )}
           <ChatInputBar
             phase={phase}
             onSubmitSpeech={actions.submitSpeech}
@@ -437,6 +413,42 @@ export default function SessionRoomPage() {
         open={sheet === 'bgPicker'}
         onClose={closeSheet}
       />
+
+      {/* I-2 — 모바일 핀 보드 시트 */}
+      {sheet === 'pinBoard' && (
+        <div
+          className="fixed inset-0 z-40 flex flex-col justify-end lg:hidden"
+          onClick={closeSheet}
+        >
+          <div
+            className="flex max-h-[70dvh] flex-col gap-3 rounded-t-2xl border-t border-border bg-background p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold text-text">
+                <Pin className="size-4 text-accent" />
+                내가 건진 것
+              </h2>
+              <button
+                type="button"
+                onClick={closeSheet}
+                className="text-xs text-text-muted"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="overflow-y-auto">
+              <PinBoard
+                pins={rawPins}
+                messages={revealedMessages}
+                cast={cast}
+                onTogglePin={(msgId) => togglePin(id, msgId)}
+                onSetNote={(msgId, note) => setPinNote(id, msgId, note)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 트랙 ⑤-2b — 페르소나 발언 필터 드로어 */}
       {selectedMember && (

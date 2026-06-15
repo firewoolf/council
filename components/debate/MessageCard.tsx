@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { CornerDownRight, Flag, HelpCircle, Megaphone, MoreHorizontal, Sparkles, User } from 'lucide-react';
+import { CornerDownRight, Flag, HelpCircle, Megaphone, MoreHorizontal, Pin, PinOff, Sparkles, User } from 'lucide-react';
 
 import { DirectionMenu } from './DirectionMenu';
 import { TypewriterText } from './TypewriterText';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { LENS_LABEL_KR, SIGNATURE_LINES } from '@/lib/prompts/personas';
+import { playSound } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 import type { PlaybackSpeed } from '@/hooks/useDebate';
 import type { DirectionAction, Message } from '@/types/debate';
@@ -36,6 +37,8 @@ interface MessageCardProps {
    */
   onDirect?: (action: DirectionAction) => void;
   onSelectMember?: (memberId: string) => void;
+  isPinned?: boolean;
+  onTogglePin?: (messageId: string) => void;
   isLatest?: boolean;
   isActive?: boolean;
   speed?: PlaybackSpeed;
@@ -63,6 +66,8 @@ export function MessageCard({
   cast,
   onDirect,
   onSelectMember,
+  isPinned = false,
+  onTogglePin,
   isLatest = false,
   isActive = false,
   speed = 1,
@@ -75,6 +80,8 @@ export function MessageCard({
   const isIntro = message.kind === 'intro';
   // ⋯ 버튼 노출 조건: 페르소나 발언 + onDirect 제공됨 (intro 제외)
   const canDirect = !isUser && !isInstruction && !isIntro && !!onDirect && !!cast;
+  // 핀 버튼: 페르소나 발언만 (사용자 발언·instruction·intro 제외)
+  const canPin = !isUser && !isInstruction && !isIntro && !!onTogglePin;
 
   // 사용자 메타 지시 — 중앙 정렬 + 다른 톤. 토론과 별개 채널임을 시각적으로 분리.
   if (isInstruction) {
@@ -99,9 +106,13 @@ export function MessageCard({
             <User className="size-3.5" />
             나
           </div>
-          <p className="whitespace-pre-wrap text-base font-normal leading-relaxed text-text">
-            {message.content}
-          </p>
+          {message.kind === 'user-choice' && isLatest && onAdvance ? (
+            <TypewriterText text={message.content} speed={speed} onAdvance={onAdvance} />
+          ) : (
+            <p className="whitespace-pre-wrap text-base font-normal leading-relaxed text-text">
+              {message.content}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -151,38 +162,65 @@ export function MessageCard({
           background: `linear-gradient(135deg, ${speaker.colorFrom}09, transparent 45%), hsl(var(--surface))`,
         }}
       >
-      {/* 트랙 ③ — 카드 우상단 ⋯ 버튼 + DirectionMenu */}
-      {canDirect && (
-        <div className="absolute right-2 top-2 z-10">
+      {/* 카드 우상단 액션 버튼 행 */}
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-0.5">
+        {/* I-2 — 핀 버튼 */}
+        {canPin && (
           <button
             type="button"
-            aria-label="디렉션 메뉴 열기"
+            aria-label={isPinned ? '핀 해제' : '핀 꽂기'}
             onClick={(e) => {
               e.stopPropagation();
-              setMenuOpen((v) => !v);
+              playSound('direction-send');
+              onTogglePin!(message.id);
             }}
             className={cn(
-              'flex size-6 items-center justify-center rounded-md text-text-muted/50 transition-colors',
-              'hover:bg-surface-2 hover:text-text-muted',
-              menuOpen && 'bg-surface-2 text-text-muted',
+              'flex size-6 items-center justify-center rounded-md transition-colors',
+              isPinned
+                ? 'text-accent hover:bg-surface-2'
+                : 'text-text-muted/40 hover:bg-surface-2 hover:text-accent',
             )}
           >
-            <MoreHorizontal className="size-3.5" />
+            {isPinned ? (
+              <Pin className="size-3.5 fill-accent stroke-accent" />
+            ) : (
+              <PinOff className="size-3.5" />
+            )}
           </button>
-          {menuOpen && (
-            <DirectionMenu
-              message={message}
-              speaker={speaker!}
-              cast={cast!}
-              onClose={() => setMenuOpen(false)}
-              onSubmit={(action) => {
-                onDirect!(action);
-                setMenuOpen(false);
+        )}
+        {/* 트랙 ③ — ⋯ 버튼 + DirectionMenu */}
+        {canDirect && (
+          <>
+            <button
+              type="button"
+              aria-label="디렉션 메뉴 열기"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen((v) => !v);
               }}
-            />
-          )}
-        </div>
-      )}
+              className={cn(
+                'flex size-6 items-center justify-center rounded-md text-text-muted/50 transition-colors',
+                'hover:bg-surface-2 hover:text-text-muted',
+                menuOpen && 'bg-surface-2 text-text-muted',
+              )}
+            >
+              <MoreHorizontal className="size-3.5" />
+            </button>
+            {menuOpen && (
+              <DirectionMenu
+                message={message}
+                speaker={speaker!}
+                cast={cast!}
+                onClose={() => setMenuOpen(false)}
+                onSubmit={(action) => {
+                  onDirect!(action);
+                  setMenuOpen(false);
+                }}
+              />
+            )}
+          </>
+        )}
+      </div>
 
       {/* 반박 연결선 */}
       {replyTarget && (
