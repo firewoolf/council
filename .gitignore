@@ -31,3 +31,4 @@ next-env.d.ts
 # sandbox 잔재 (수동 삭제 시 macOS에서 정상 삭제됨)
 .tmp_typecheck/
 .vercel
+.claude/settings.local.json
