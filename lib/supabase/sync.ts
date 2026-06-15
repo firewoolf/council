@@ -18,6 +18,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { Conclusion } from '@/lib/prompts/orchestrator';
 import type { Message, Session } from '@/types/debate';
+import type { UserProfile } from '@/store/profile';
 import { getOrCreateDeviceId } from './client';
 import type { Database } from './types';
 
@@ -93,6 +94,18 @@ export async function pushConclusion(
     .update({ status: 'concluded' })
     .eq('id', sessionId);
   if (sessErr) throw new Error(`session status 갱신 실패: ${sessErr.message}`);
+}
+
+export async function pushUserProfile(
+  sb: SB,
+  profile: UserProfile,
+): Promise<void> {
+  const { error } = await sb.from('user_profile').upsert({
+    device_id: getOrCreateDeviceId(),
+    observed_patterns: profile.observedPatterns,
+    updated_at: profile.updatedAt,
+  });
+  if (error) throw new Error(`user_profile upsert 실패: ${error.message}`);
 }
 
 /**

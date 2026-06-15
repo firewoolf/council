@@ -33,7 +33,9 @@ import {
   synthesizeVoiceCard,
 } from '@/lib/prompts/synthesize';
 import { composeConcern, type ClarifyQuestion } from '@/lib/prompts/concern-shaping';
+import { buildMirrorContext, computeMirrorStats } from '@/lib/mirror/stats';
 import { useApiKeyStore } from '@/store/api-key';
+import { useProfileStore } from '@/store/profile';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import type { CastMember, Lens, Trait } from '@/types/persona';
@@ -144,10 +146,20 @@ export default function NewSessionPage() {
       setClarifyLoading(true);
       setStep('clarifying');
       try {
+        const sessionsState = useSessionsStore.getState();
+        const profileState = useProfileStore.getState();
+        const mirror = buildMirrorContext(
+          computeMirrorStats(
+            sessionsState.sessionChunks ?? {},
+            sessionsState.conclusions,
+          ),
+          profileState.observedPatterns,
+        );
         const result = await clarifyConcern({
           provider: state.provider ?? available[0]!,
           apiKey: state.keys[state.provider ?? available[0]!] ?? '',
           concern: text,
+          mirror,
         });
         setClarifyQuestions(result.questions);
       } catch {

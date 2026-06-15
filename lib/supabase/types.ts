@@ -153,6 +153,20 @@ export interface Database {
         >;
         Relationships: [];
       };
+      user_profile: {
+        Row: {
+          device_id: string;
+          observed_patterns: string[];
+          updated_at: string;
+        };
+        Insert: {
+          device_id: string;
+          observed_patterns?: string[];
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['user_profile']['Insert']>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

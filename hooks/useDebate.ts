@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import {
   generateChunk,
   generateConclusion,
+  generateMirrorProfile,
   streamChunk,
   type ChunkTurn,
 } from '@/lib/ai/client';
@@ -17,11 +18,17 @@ import { showAiError } from '@/lib/ai/showAiError';
 import { formatDirection, getDirectionLabel } from '@/lib/prompts/directions';
 import { generateIntroStatement } from '@/lib/prompts/intro';
 import { PERSONA_MAP } from '@/lib/prompts/personas';
+import {
+  computeMirrorStats,
+  hasRecurringMirrorSignal,
+} from '@/lib/mirror/stats';
 import { playSound } from '@/lib/sound';
 import type { SoundEvent } from '@/lib/sound';
 import { readingTime } from '@/lib/utils';
 import { useApiKeyStore } from '@/store/api-key';
+import { useProfileStore } from '@/store/profile';
 import { useSessionsStore } from '@/store/sessions';
+import type { Conclusion } from '@/lib/prompts/orchestrator';
 import type { ChunkMeta, DirectionAction, Message, NextTopicChoice } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
@@ -126,6 +133,105 @@ function soundFor(msg: Message): SoundEvent {
   if (msg.isKeyPoint) return 'keypoint';
   if (msg.isQuestion) return 'question';
   return 'reveal';
+}
+
+function buildMirrorSessionSummary(args: {
+  concern: string;
+  chunks: readonly ChunkMeta[];
+  conclusion: Conclusion;
+  recurringOpenQuestions: readonly string[];
+}): string {
+  const blindSpots = args.chunks.flatMap((chunk) =>
+    chunk.nextTopics
+      .filter((topic) => topic.isBlindSpot)
+      .map((topic) => ({
+        label: topic.label,
+        taken: chunk.chosenNextLabel === topic.label,
+      })),
+  );
+  const blindSpotSummary =
+    blindSpots.length > 0
+      ? blindSpots
+          .map(({ label, taken }) => `- ${label}: ${taken ? '선택' : '회피'}`)
+          .join('\n')
+      : '- 제시 없음';
+  const divided =
+    args.conclusion.divided?.map((point) => `- ${point.topic}`).join('\n') ??
+    '- 없음';
+  const openQuestions =
+    args.conclusion.openQuestions?.map((question) => `- ${question}`).join('\n') ??
+    '- 없음';
+  const recurring =
+    args.recurringOpenQuestions.map((question) => `- ${question}`).join('\n') ||
+    '- 없음';
+
+  return `고민: ${args.concern}
+
+못 본 각도 선택:
+${blindSpotSummary}
+
+끝내 갈린 지점:
+${divided}
+
+이번 미해결 질문:
+${openQuestions}
+
+여러 세션에서 반복된 미해결 질문:
+${recurring}`;
+}
+
+async function refreshMirrorProfile(args: {
+  concern: string;
+  chunks: readonly ChunkMeta[];
+  conclusion: Conclusion;
+  keys: Partial<Record<AiProvider, string>>;
+}): Promise<void> {
+  const sessionsState = useSessionsStore.getState();
+  const chunksBySession = sessionsState.sessionChunks ?? {};
+  const stats = computeMirrorStats(
+    chunksBySession,
+    sessionsState.conclusions,
+  );
+  if (
+    stats.sessionCount < 3 ||
+    !hasRecurringMirrorSignal(stats, chunksBySession)
+  ) {
+    return;
+  }
+
+  const profileState = useProfileStore.getState();
+  const { result } = await runWithFallback(
+    'conclude',
+    args.keys,
+    (provider, apiKey) =>
+      generateMirrorProfile({
+        provider,
+        apiKey,
+        sessionSummary: buildMirrorSessionSummary({
+          concern: args.concern,
+          chunks: args.chunks,
+          conclusion: args.conclusion,
+          recurringOpenQuestions: stats.recurringOpenQuestions,
+        }),
+        observedPatterns: profileState.observedPatterns,
+      }),
+  );
+
+  const profile = useProfileStore
+    .getState()
+    .setObservedPatterns(result.observedPatterns);
+  const [{ getBrowserSupabase }, { pushUserProfile }] = await Promise.all([
+    import('@/lib/supabase/client'),
+    import('@/lib/supabase/sync'),
+  ]);
+  const supabase = getBrowserSupabase();
+  if (supabase) {
+    try {
+      await pushUserProfile(supabase, profile);
+    } catch (err) {
+      console.warn('거울 프로필 Supabase 동기화 실패', err);
+    }
+  }
 }
 
 function generateId(): string {
@@ -685,6 +791,14 @@ export function useDebate(sessionId: string): UseDebateReturn {
         updateSessionProvider(sessionId, usedProvider);
         saveConclusion(sessionId, result);
         setPhase('concluded');
+        void refreshMirrorProfile({
+          concern: session.concern,
+          chunks: safeChunks,
+          conclusion: result,
+          keys: liveKeys,
+        }).catch((err) => {
+          console.warn('거울 프로필 갱신 실패', err);
+        });
       } catch (err) {
         if (cancelled) return;
         if (err instanceof AiCallError) {

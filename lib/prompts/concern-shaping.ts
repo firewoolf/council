@@ -26,7 +26,18 @@ export type ClarifyQuestion = z.infer<typeof clarifyQuestionSchema>;
 export type ClarifyQuestions = z.infer<typeof clarifyQuestionsSchema>;
 
 /** 부록 A-1 박제 원문. */
-export function buildClarifyPrompt(rawConcern: string): string {
+export function buildClarifyPrompt(
+  rawConcern: string,
+  mirror?: string,
+): string {
+  const mirrorBlock = mirror
+    ? `
+
+[거울 — 이 사람의 누적 패턴]
+${mirror}
+위 패턴을 의식하되 *위로하지 마라*. 역질문 2~3개 중 최소 하나는 이 맹점을 정면으로 건드려라.`
+    : '';
+
   return `당신은 COUNCIL의 사회자입니다. 사용자가 전문가 패널 토론에 들고 온 고민이
 아직 한두 줄로 짧습니다. 패널이 *날카롭게* 토론하려면 맥락이 더 필요합니다.
 
@@ -34,7 +45,7 @@ export function buildClarifyPrompt(rawConcern: string): string {
 않았지만 결정에 결정적인 것들을 끌어내는 질문 2~3개를 만드세요.
 
 [사용자가 들고 온 한 줄]
-${rawConcern}
+${rawConcern}${mirrorBlock}
 
 [질문 설계 규칙]
 1. 이 고민에만 들어맞는 질문. "목표가 무엇인가요?" 같은 아무 고민에나 붙는

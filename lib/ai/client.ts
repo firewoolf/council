@@ -31,6 +31,11 @@ import {
   type ClarifyQuestions,
 } from '@/lib/prompts/concern-shaping';
 import {
+  buildMirrorProfilePrompt,
+  mirrorProfileSchema,
+  type MirrorProfileResult,
+} from '@/lib/prompts/mirror';
+import {
   buildConclusionPrompt,
   buildChunkPrompt,
   CHUNK_SYSTEM_PROMPT,
@@ -491,16 +496,43 @@ export async function clarifyConcern(args: {
   provider: AiProvider;
   apiKey: string;
   concern: string;
+  mirror?: string;
 }): Promise<ClarifyQuestions> {
   try {
     const model = getModel(args.provider, args.apiKey);
     const { object } = await generateObject({
       model,
       schema: clarifyQuestionsSchema,
-      prompt: buildClarifyPrompt(args.concern),
+      prompt: buildClarifyPrompt(args.concern, args.mirror),
       temperature: TEMPERATURE.recommend,
       maxRetries: 1,
       maxTokens: 600,
+    });
+    return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
+}
+
+/** M-3 — 세션 간 반복 맹점 병합. 결론 저장 후 비동기로 호출한다. */
+export async function generateMirrorProfile(args: {
+  provider: AiProvider;
+  apiKey: string;
+  sessionSummary: string;
+  observedPatterns: readonly string[];
+}): Promise<MirrorProfileResult> {
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: mirrorProfileSchema,
+      prompt: buildMirrorProfilePrompt({
+        sessionSummary: args.sessionSummary,
+        observedPatterns: args.observedPatterns,
+      }),
+      temperature: TEMPERATURE.recommend,
+      maxRetries: 1,
+      maxTokens: 350,
     });
     return object;
   } catch (err) {
