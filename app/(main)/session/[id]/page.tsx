@@ -35,6 +35,8 @@ import { useSessionsStore } from '@/store/sessions';
 import { useStageStore } from '@/store/stage';
 import { cn } from '@/lib/utils';
 
+const EMPTY: never[] = [];
+
 /**
  * 트랙 ⑤-1 — 청크 재생 + 갈림길 회의실.
  *
@@ -49,11 +51,11 @@ export default function SessionRoomPage() {
   const mounted = useHasMounted();
 
   const session = useSessionsStore((s) => s.sessions[id]);
-  const cast = useSessionsStore((s) => s.sessionCast?.[id] ?? []);
+  const cast = useSessionsStore((s) => s.sessionCast?.[id]) ?? EMPTY;
   const domain = useSessionsStore((s) => s.domains[id] ?? null);
   const conclusion = useSessionsStore((s) => s.conclusions[id] ?? null);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
-  const rawPins = useSessionsStore((s) => s.pins?.[id] ?? []);
+  const rawPins = useSessionsStore((s) => s.pins?.[id]) ?? EMPTY;
   const togglePin = useSessionsStore((s) => s.togglePin);
   const setPinNote = useSessionsStore((s) => s.setPinNote);
   const pinnedIds = useMemo(() => new Set(rawPins.map((p) => p.messageId)), [rawPins]);

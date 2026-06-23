@@ -26,6 +26,8 @@ import type { Conclusion, DividedPoint } from '@/lib/prompts/orchestrator';
 import type { ChunkMeta, Message } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 
+const EMPTY: never[] = [];
+
 /**
  * 결론 화면 — 트랙 ② 결정 지도형 결론.
  *
@@ -43,10 +45,10 @@ export default function SessionSummaryPage() {
 
   const session = useSessionsStore((s) => s.sessions[id]);
   const conclusion = useSessionsStore((s) => s.conclusions[id]);
-  const cast = useSessionsStore((s) => s.sessionCast?.[id] ?? []);
-  const messages = useSessionsStore((s) => s.messages[id] ?? []);
-  const pins = useSessionsStore((s) => s.pins?.[id] ?? []);
-  const chunks = useSessionsStore((s) => s.sessionChunks?.[id] ?? []);
+  const cast     = useSessionsStore((s) => s.sessionCast?.[id])   ?? EMPTY;
+  const messages = useSessionsStore((s) => s.messages[id])        ?? EMPTY;
+  const pins     = useSessionsStore((s) => s.pins?.[id])          ?? EMPTY;
+  const chunks   = useSessionsStore((s) => s.sessionChunks?.[id]) ?? EMPTY;
 
   const castMap = useMemo(
     () => new Map(cast.map((c) => [c.id, c])),
