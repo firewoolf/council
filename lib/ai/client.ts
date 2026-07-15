@@ -46,30 +46,81 @@ import type { Message, MoveType } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 import { PROVIDERS, type AiProvider } from './providers';
 import { AiCallError, classifyAiError } from './errors';
+import { SERVER_KEY_SENTINEL, useEmbedAuthStore } from '@/store/embed-auth';
+
+/**
+ * 서버 모드 감지 — apiKey 가 센티넬이면 BYOK 대신 council 서버 프록시(/api/ai/*)로 호출.
+ * baseURL 을 프록시로 잡고 티켓을 헤더에 실으면, 서버가 등록된 키를 주입해 실제 공급사로 포워드한다.
+ * 반환: 프록시 옵션(baseURL/headers) 또는 null(=BYOK).
+ */
+function serverProxyOptions(
+  provider: AiProvider,
+  apiKey: string,
+): { baseURL: string; headers: Record<string, string> } | null {
+  if (apiKey !== SERVER_KEY_SENTINEL) return null;
+  const ticket = useEmbedAuthStore.getState().ticket ?? '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  return {
+    baseURL: `${origin}/api/ai/${provider}`,
+    headers: { 'x-council-ticket': ticket },
+  };
+}
 
 /**
  * 공급사 + 키 → AI SDK 모델 인스턴스 생성.
  * 호출 시점마다 새로 만든다 (키가 바뀔 수 있음).
+ *
+ * apiKey 가 SERVER_KEY_SENTINEL 이면 서버 프록시 경유(로그인 사용자용). 그 외엔 BYOK.
  */
 function getModel(provider: AiProvider, apiKey: string) {
   const config = PROVIDERS[provider];
+  const proxy = serverProxyOptions(provider, apiKey);
   switch (provider) {
     case 'gemini':
-      return createGoogleGenerativeAI({ apiKey })(config.modelId);
+      return proxy
+        ? createGoogleGenerativeAI({ apiKey: 'server', baseURL: proxy.baseURL, headers: proxy.headers })(config.modelId)
+        : createGoogleGenerativeAI({ apiKey })(config.modelId);
     case 'groq':
-      return createGroq({ apiKey })(config.modelId);
+      return proxy
+        ? createGroq({ apiKey: 'server', baseURL: proxy.baseURL, headers: proxy.headers })(config.modelId)
+        : createGroq({ apiKey })(config.modelId);
     case 'openrouter':
       // HTTP-Referer / X-Title 은 OpenRouter 가 어떤 앱에서 호출됐는지
       // 식별/통계용으로 권장하는 헤더. 누락해도 동작은 하지만 적어두는 게 매너.
-      return createOpenRouter({
-        apiKey,
-        headers: {
-          'HTTP-Referer': 'https://council.app',
-          'X-Title': 'COUNCIL',
-        },
-      })(config.modelId);
+      return proxy
+        ? createOpenRouter({ apiKey: 'server', baseURL: proxy.baseURL, headers: proxy.headers })(config.modelId)
+        : createOpenRouter({
+            apiKey,
+            headers: {
+              'HTTP-Referer': 'https://council.app',
+              'X-Title': 'COUNCIL',
+            },
+          })(config.modelId);
     case 'cerebras':
-      return createCerebras({ apiKey })(config.modelId);
+      return proxy
+        ? createCerebras({ apiKey: 'server', baseURL: proxy.baseURL, headers: proxy.headers })(config.modelId)
+        : createCerebras({ apiKey })(config.modelId);
+    // 서버키 프록시 전용 공급사 — OpenAI 호환. 프록시 경유로만 호출(BYOK 불가).
+    // createOpenRouter 를 제네릭 OpenAI-호환 클라이언트로 재사용(baseURL=프록시).
+    // @ai-sdk/openai-compatible 로 바꾸려면 이 분기만 교체하면 된다.
+    case 'mistral':
+    case 'sambanova':
+    case 'nvidia':
+    case 'together':
+    case 'github':
+      if (!proxy) {
+        throw new AiCallError(
+          'unknown',
+          provider,
+          `${config.displayName}는 서버 모드(로그인)에서만 사용할 수 있습니다.`,
+          'server-only',
+        );
+      }
+      return createOpenRouter({
+        apiKey: 'server',
+        baseURL: proxy.baseURL,
+        headers: proxy.headers,
+      })(config.modelId);
     case 'claude':
       // 브라우저에서는 호출 불가. 호출 시도 자체가 잘못된 경로.
       throw new AiCallError(
@@ -288,6 +339,7 @@ export async function generateChunk(args: {
   topic: string;
   transcript: string;
   isFirst: boolean;
+  miContext?: string;
 }): Promise<Chunk> {
   try {
     const model = getModel(args.provider, args.apiKey);
@@ -301,6 +353,7 @@ export async function generateChunk(args: {
         topic: args.topic,
         transcript: args.transcript,
         isFirst: args.isFirst,
+        miContext: args.miContext,
       }),
       temperature: TEMPERATURE.speech,
       maxRetries: 1,
@@ -375,6 +428,7 @@ export async function streamChunk(args: {
   topic: string;
   transcript: string;
   isFirst: boolean;
+  miContext?: string;
   signal?: AbortSignal;
   /** 턴이 확정될 때마다 — sanitize 전 raw turn (index 순서 보장) */
   onTurn: (turn: ChunkTurn, index: number) => void;
@@ -396,6 +450,7 @@ export async function streamChunk(args: {
         topic: args.topic,
         transcript: args.transcript,
         isFirst: args.isFirst,
+        miContext: args.miContext,
       }),
       temperature: TEMPERATURE.speech,
       maxRetries: 0,

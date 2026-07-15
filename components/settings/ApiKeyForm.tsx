@@ -100,7 +100,8 @@ interface ProviderCardProps {
  * 공급사별 키 placeholder / 형식 힌트.
  * 새 공급사 추가 시 여기 한 줄만 채우면 카드 UX가 자동으로 따라온다.
  */
-const KEY_HINTS: Record<AiProvider, { placeholder: string; prefix: string }> = {
+// BYOK(설정 화면) 공급사만 대상 — 서버키 전용 공급사는 여기 없다(Partial).
+const KEY_HINTS: Partial<Record<AiProvider, { placeholder: string; prefix: string }>> = {
   gemini: { placeholder: 'AIzaSy...', prefix: 'AIzaSy' },
   groq: { placeholder: 'gsk_...', prefix: 'gsk_' },
   openrouter: { placeholder: 'sk-or-v1-...', prefix: 'sk-or-v1-' },
@@ -121,7 +122,7 @@ function ProviderCard({
   onSwitchProvider,
 }: ProviderCardProps) {
   const config = PROVIDERS[provider];
-  const hints = KEY_HINTS[provider];
+  const hints = KEY_HINTS[provider] ?? { placeholder: '', prefix: '' };
   const [draft, setDraft] = useState(savedKey);
   const [testing, setTesting] = useState(false);
 

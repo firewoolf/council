@@ -24,6 +24,7 @@ import { DirectorConsole } from '@/components/debate/DirectorConsole';
 import { PersonaDetailDrawer } from '@/components/debate/PersonaDetailDrawer';
 import { PinBoard } from '@/components/debate/PinBoard';
 import { SteeringSheet } from '@/components/debate/SteeringSheet';
+import { UsageIndicator } from '@/components/debate/UsageIndicator';
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
 import { useDebate } from '@/hooks/useDebate';
@@ -164,6 +165,9 @@ export default function SessionRoomPage() {
           )}
         </button>
       </div>
+
+      {/* 접이식 사용량 인디케이터 — 기록 있을 때만 표시 */}
+      <UsageIndicator />
 
       {/* 헤더 — 접힘 */}
       <header className="overflow-hidden rounded-xl border border-border bg-surface">

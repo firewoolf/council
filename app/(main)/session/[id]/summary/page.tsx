@@ -19,6 +19,7 @@ import { toast } from 'sonner';
 
 import { PersonaOrb } from '@/components/persona/PersonaOrb';
 import { Button } from '@/components/ui/button';
+import { postEmbedResult } from '@/lib/embed/protocol';
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { playSound } from '@/lib/sound';
 import { useSessionsStore } from '@/store/sessions';
@@ -81,6 +82,17 @@ export default function SessionSummaryPage() {
     if (!mounted || !conclusion) return;
     playSound('conclude');
   }, [mounted, conclusion]);
+
+  // 임베드(insight-out) 호스트로 결론 회신 — iframe 안에서만 동작.
+  useEffect(() => {
+    if (!mounted || !session || !conclusion) return;
+    postEmbedResult({
+      sessionId: id,
+      title: session.title,
+      concern: session.concern,
+      conclusion,
+    });
+  }, [mounted, session, conclusion, id]);
 
   if (!mounted || !session || !conclusion) {
     return <div className="min-h-[60vh]" aria-hidden />;

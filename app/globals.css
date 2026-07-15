@@ -69,6 +69,28 @@
   }
 }
 
+/* ============================================================
+   임베드 테마 — insight-out 호스트에 색을 맞춘다.
+   EmbedBridge 가 임베드 감지 시 <html data-embed="insight-out"> 를 단다.
+   council 의 시맨틱 변수만 insight-out 다크 팔레트로 재정의 → 전 컴포넌트가
+   자동으로 리컬러(브랜드 마젠타 중심). 폰트는 양쪽 다 Pretendard 라 그대로 일치.
+   (unlayered 선택자 + 속성 선택자 → @layer base 의 :root 보다 우선.)
+   ============================================================ */
+:root[data-embed='insight-out'] {
+  --background:  228 20% 4%;    /* #08090C */
+  --surface:     222 24% 8%;    /* #10131A */
+  --surface-2:   220 25% 12%;   /* #171C26 (card) */
+  --border:      216 16% 24%;   /* insight-out #48566D 를 완화 */
+
+  --primary:      330 100% 65%; /* #FF4FA8 — insight-out 브랜드(다크) */
+  --primary-glow: 330 100% 65%;
+  --accent:       331 100% 59%; /* #FF2D92 — 브랜드 딥, 키포인트 하이라이트 */
+
+  --text:        220 13% 97%;   /* #F5F6F8 */
+  --text-muted:  218 11% 65%;   /* #9CA3AF */
+  --text-dim:    219 11% 40%;   /* 딤 그레이 */
+}
+
 /* 페르소나 orb glow 유틸 */
 @layer utilities {
   .glow-primary {

@@ -48,6 +48,7 @@ interface SessionsState {
     cast: CastMember[];
     aiProvider: Session['aiProvider'];
     domain?: string | null;
+    miContext?: string;
   }) => Session;
 
   getSession: (id: string) => Session | undefined;
@@ -218,7 +219,7 @@ export const useSessionsStore = create<SessionsState>()(
       sessionChunks: {},
       pins: {},
 
-      createSession: ({ concern, title, cast, aiProvider, domain }) => {
+      createSession: ({ concern, title, cast, aiProvider, domain, miContext }) => {
         const id = generateId();
         const session: Session = {
           id,
@@ -226,6 +227,7 @@ export const useSessionsStore = create<SessionsState>()(
           concern,
           status: 'active',
           aiProvider,
+          ...(miContext ? { miContext } : {}),
           createdAt: new Date().toISOString(),
         };
 

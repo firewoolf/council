@@ -20,6 +20,12 @@ export interface Session {
    * Supabase 도입 시 ai_provider enum 마이그레이션 필요.
    */
   aiProvider: AiProvider;
+  /**
+   * insight-out MI(마켓 인텔리전스) 근거 블록.
+   * 임베드 모드에서 MI 를 불러온 경우에만 채워지며,
+   * 매 발언 청크 프롬프트에 참고 자료로 주입된다.
+   */
+  miContext?: string;
   createdAt: string; // ISO
 }
 
