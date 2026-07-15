@@ -12,6 +12,7 @@ import {
   PersonaPicker,
   type CustomPersonaInput,
 } from '@/components/session/PersonaPicker';
+import { TopicSuggestions } from '@/components/session/TopicSuggestions';
 import { Button } from '@/components/ui/button';
 import { clarifyConcern, designPanel } from '@/lib/ai/client';
 import { AiCallError } from '@/lib/ai/errors';
@@ -382,6 +383,11 @@ export default function NewSessionPage() {
 
   return (
     <div className="flex flex-col gap-8 pt-4">
+      {/* 레벨 1+2 — MI 능동 주제 제안. insight-out 임베드 전용(특화) — 단독 council 엔 안 뜬다.
+          클릭 시 그 주제로 바로 토론 시작. */}
+      {step === 'input' && isEmbedded() && (
+        <TopicSuggestions onPick={(topic) => void handleAnalyze(topic)} />
+      )}
       {step === 'input' && embedSources.length > 0 && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">
