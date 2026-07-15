@@ -38,7 +38,13 @@ export async function pushSession(
     title: session.title,
     concern: session.concern,
     status: session.status,
-    ai_provider: session.aiProvider,
+    // DB enum 은 아직 BYOK 5종만 — 서버 전용 공급사는 스키마 확장 전까지 캐스팅.
+    ai_provider: session.aiProvider as
+      | 'gemini'
+      | 'groq'
+      | 'openrouter'
+      | 'cerebras'
+      | 'claude',
     domain,
     created_at: session.createdAt,
   });

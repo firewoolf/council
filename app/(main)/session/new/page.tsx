@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -34,7 +34,21 @@ import {
 } from '@/lib/prompts/synthesize';
 import { composeConcern, type ClarifyQuestion } from '@/lib/prompts/concern-shaping';
 import { buildMirrorContext, computeMirrorStats } from '@/lib/mirror/stats';
+import {
+  clearEmbedSeed,
+  isEmbedded,
+  readEmbedSeed,
+  type EmbedSource,
+} from '@/lib/embed/protocol';
+import {
+  augmentConcernWithMi,
+  buildMiContext,
+  loadMiBundle,
+} from '@/lib/mi/client';
+import { isMiBundleEmpty, type MiBundle } from '@/lib/mi/types';
+import { resolveKeys } from '@/lib/ai/access';
 import { useApiKeyStore } from '@/store/api-key';
+import { useEmbedAuthStore } from '@/store/embed-auth';
 import { useProfileStore } from '@/store/profile';
 import { useSessionsStore } from '@/store/sessions';
 import { useHasMounted } from '@/hooks/useHasMounted';
@@ -57,15 +71,31 @@ export default function NewSessionPage() {
   const createSession = useSessionsStore((s) => s.createSession);
 
   const [step, setStep] = useState<Step>('input');
-  const [concern, setConcern] = useState('');
+  // 임베드(insight-out) 컨텍스트 주입 — 고민/근거 소스를 초기 렌더에 프리필.
+  const [concern, setConcern] = useState<string>(() => readEmbedSeed()?.concern ?? '');
+  const [embedSources] = useState<EmbedSource[]>(() => readEmbedSeed()?.sources ?? []);
   const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
   const [clarifyLoading, setClarifyLoading] = useState(false);
   const [cast, setCast] = useState<CastMember[]>([]);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [domain, setDomain] = useState<string | null>(null);
 
+  // MI(insight-out) 근거 — 임베드 모드면 기본 사용. 로드 후 패널 설계·토론에 주입.
+  const [useMi, setUseMi] = useState<boolean>(() => isEmbedded());
+  const [miBundle, setMiBundle] = useState<MiBundle | null>(null);
+  const [miContext, setMiContext] = useState<string | undefined>(undefined);
+
   const apiKey = getActiveKey();
-  const hasKey = mounted && !!apiKey && !!provider;
+  // 서버 모드(임베드 로그인)면 BYOK 키 없이도 통과.
+  const serverMode = useEmbedAuthStore(
+    (s) => !!s.ticket && s.serverProviders.length > 0,
+  );
+  const hasKey = mounted && (serverMode || (!!apiKey && !!provider));
+
+  // 주입된 컨텍스트는 초기 state 로 소비했으니 즉시 삭제 — 재진입 시 오염 방지.
+  useEffect(() => {
+    clearEmbedSeed();
+  }, []);
 
   /**
    * 추천 호출 + 자동 fallback 흐름.
@@ -75,7 +105,8 @@ export default function NewSessionPage() {
   const handleAnalyze = useCallback(
     async (text: string): Promise<void> => {
       const state = useApiKeyStore.getState();
-      const available = listAvailableProviders(state.keys);
+      const activeKeys = resolveKeys();
+      const available = listAvailableProviders(activeKeys);
       if (available.length === 0) {
         toast.error('API 키가 필요합니다. 설정 페이지에서 먼저 등록해주세요.');
         return;
@@ -83,12 +114,31 @@ export default function NewSessionPage() {
       setConcern(text);
       setStep('analyzing');
 
+      // MI 근거 로드 (설정·임베드 시). 실패해도 토론은 MI 없이 진행.
+      let designConcern = text;
+      let bundle = miBundle;
+      if (useMi && !bundle) {
+        try {
+          const res = await loadMiBundle(text);
+          if (res.configured && !isMiBundleEmpty(res.bundle)) {
+            bundle = res.bundle;
+            setMiBundle(res.bundle);
+            setMiContext(buildMiContext(res.bundle));
+          }
+        } catch {
+          /* MI 없이 계속 */
+        }
+      }
+      if (bundle && !isMiBundleEmpty(bundle)) {
+        designConcern = augmentConcernWithMi(text, bundle);
+      }
+
       try {
         const { result } = await runWithFallback(
           'recommend',
-          state.keys,
+          activeKeys,
           (provider, apiKey) =>
-            designPanel({ provider, apiKey, concern: text }),
+            designPanel({ provider, apiKey, concern: designConcern }),
         );
 
         const { cast: sanitized, notes } = sanitizePanel(result.panel);
@@ -130,14 +180,15 @@ export default function NewSessionPage() {
         }
       }
     },
-    [setProvider],
+    [setProvider, useMi, miBundle],
   );
 
   /** I-1 — "AI와 다듬기" 클릭 시 역질문 생성. 실패 시 analyzing 직행. */
   const handleClarify = useCallback(
     async (text: string): Promise<void> => {
       const state = useApiKeyStore.getState();
-      const available = listAvailableProviders(state.keys);
+      const activeKeys = resolveKeys();
+      const available = listAvailableProviders(activeKeys);
       if (available.length === 0) {
         toast.error('API 키가 필요합니다. 설정 페이지에서 먼저 등록해주세요.');
         return;
@@ -155,9 +206,13 @@ export default function NewSessionPage() {
           ),
           profileState.observedPatterns,
         );
+        const prov =
+          state.provider && activeKeys[state.provider]
+            ? state.provider
+            : available[0]!;
         const result = await clarifyConcern({
-          provider: state.provider ?? available[0]!,
-          apiKey: state.keys[state.provider ?? available[0]!] ?? '',
+          provider: prov,
+          apiKey: activeKeys[prov] ?? '',
           concern: text,
           mirror,
         });
@@ -272,7 +327,11 @@ export default function NewSessionPage() {
   );
 
   const handleStart = useCallback(() => {
-    if (!provider) {
+    // 서버 모드면 provider store 가 비어있을 수 있어 서버 공급사로 폴백.
+    const activeKeys = resolveKeys();
+    const effectiveProvider =
+      provider ?? ((Object.keys(activeKeys)[0] as AiProvider | undefined) ?? null);
+    if (!effectiveProvider) {
       toast.error('AI 공급사가 선택되지 않았습니다.');
       return;
     }
@@ -283,11 +342,12 @@ export default function NewSessionPage() {
     const session = createSession({
       concern,
       cast,
-      aiProvider: provider,
+      aiProvider: effectiveProvider,
       domain,
+      miContext,
     });
     router.push(`/session/${session.id}`);
-  }, [provider, cast, concern, domain, createSession, router]);
+  }, [provider, cast, concern, domain, miContext, createSession, router]);
 
   // 마운트 전: 깜빡임 방지용 빈 컨테이너
   if (!mounted) {
@@ -322,6 +382,51 @@ export default function NewSessionPage() {
 
   return (
     <div className="flex flex-col gap-8 pt-4">
+      {step === 'input' && embedSources.length > 0 && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+            insight-out MI 컨텍스트 연결됨
+          </p>
+          <ul className="mt-2 flex flex-col gap-1">
+            {embedSources.map((s, i) => (
+              <li key={i} className="text-sm text-text/90">
+                {s.url ? (
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline decoration-primary/40 underline-offset-2 hover:text-primary"
+                  >
+                    {s.title}
+                  </a>
+                ) : (
+                  s.title
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {step === 'input' && (
+        <label className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-text/90">
+          <input
+            type="checkbox"
+            checked={useMi}
+            onChange={(e) => setUseMi(e.target.checked)}
+            className="size-4 accent-primary"
+          />
+          <span>
+            insight-out 마켓 인텔리전스 근거로 패널 구성·토론
+            {miBundle && !isMiBundleEmpty(miBundle) && (
+              <span className="ml-1 text-xs text-primary">
+                · 콘텐츠 {miBundle.contents.length} · 이슈{' '}
+                {miBundle.issues.length} · 경쟁사{' '}
+                {miBundle.entities.filter((e) => e.isCompetitor).length} 연결됨
+              </span>
+            )}
+          </span>
+        </label>
+      )}
       {step === 'input' && (
         <ConcernInput
           busy={false}

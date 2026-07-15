@@ -13,7 +13,13 @@ export type AiProvider =
   | 'groq'
   | 'openrouter'
   | 'cerebras'
-  | 'claude';
+  | 'claude'
+  // 서버키 프록시 전용 추가 공급사 (OpenAI 호환). BYOK 미지원 — 서버 모드에서만.
+  | 'mistral'
+  | 'sambanova'
+  | 'nvidia'
+  | 'together'
+  | 'github';
 
 /**
  * LLM 호출 작업 종류 — provider 라우팅에 사용.
@@ -152,6 +158,71 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     accent: { from: '#D97757', to: '#F4A887' },
     freeTier: '무료 한도 없음. 사용량 과금.',
   },
+
+  // ── 서버키 프록시 전용 (OpenAI 호환, BYOK 미노출) ─────────────
+  // browserDirect:false → 설정(BYOK) UI 에 안 뜬다. 서버 모드에서만 프록시 경유로 사용.
+  // supportsStream:false → 구조화 스트리밍 안정성 미검증이라 generateObject 경로(안전).
+  // roles 생략 → 폴백 범용(어떤 role 이든 처리 가능).
+  mistral: {
+    id: 'mistral',
+    displayName: 'Mistral AI',
+    signupUrl: 'https://console.mistral.ai/api-keys',
+    signupGuide: '서버 등록 키 사용(MISTRAL_API_KEYS).',
+    modelId: 'mistral-small-latest',
+    keyPattern: /.+/,
+    browserDirect: false,
+    supportsStream: false,
+    accent: { from: '#FF7000', to: '#FFB27A' },
+    freeTier: '무료 체험 한도 (La Plateforme).',
+  },
+  sambanova: {
+    id: 'sambanova',
+    displayName: 'SambaNova',
+    signupUrl: 'https://cloud.sambanova.ai',
+    signupGuide: '서버 등록 키 사용(SAMBANOVA_API_KEYS).',
+    modelId: 'Meta-Llama-3.3-70B-Instruct',
+    keyPattern: /.+/,
+    browserDirect: false,
+    supportsStream: false,
+    accent: { from: '#6D28D9', to: '#A78BFA' },
+    freeTier: '무료 티어 (SambaNova Cloud).',
+  },
+  nvidia: {
+    id: 'nvidia',
+    displayName: 'NVIDIA NIM',
+    signupUrl: 'https://build.nvidia.com',
+    signupGuide: '서버 등록 키 사용(NVIDIA_API_KEYS).',
+    modelId: 'meta/llama-3.3-70b-instruct',
+    keyPattern: /.+/,
+    browserDirect: false,
+    supportsStream: false,
+    accent: { from: '#76B900', to: '#B6F04A' },
+    freeTier: '무료 크레딧 (build.nvidia.com).',
+  },
+  together: {
+    id: 'together',
+    displayName: 'Together AI',
+    signupUrl: 'https://api.together.ai',
+    signupGuide: '서버 등록 키 사용(TOGETHER_API_KEYS).',
+    modelId: 'meta-llama/Llama-3.3-70B-Instruct-Turbo-Free',
+    keyPattern: /.+/,
+    browserDirect: false,
+    supportsStream: false,
+    accent: { from: '#0EA5E9', to: '#7DD3FC' },
+    freeTier: '무료 모델(-Free) + 체험 크레딧.',
+  },
+  github: {
+    id: 'github',
+    displayName: 'GitHub Models',
+    signupUrl: 'https://github.com/marketplace/models',
+    signupGuide: '서버 등록 키 사용(GITHUB_MODELS_API_KEYS).',
+    modelId: 'gpt-4o-mini',
+    keyPattern: /.+/,
+    browserDirect: false,
+    supportsStream: false,
+    accent: { from: '#64748B', to: '#CBD5E1' },
+    freeTier: '무료 (GitHub Models, PAT 필요).',
+  },
 };
 
 /** 키 형식 1차 검증 (정규식만 — 실제 유효성은 ping API로 확인) */
@@ -215,4 +286,20 @@ export const BYOK_PROVIDERS: AiProvider[] = [
   'openrouter',
   'cerebras',
   'gemini',
+];
+
+/**
+ * 서버 모드에서 사용 가능한 공급사 — 클라이언트가 SDK 로 모델을 만들 수 있는 것들.
+ * upstream.ts(프록시 업스트림)와 짝. resolveKeys 가 서버 공급사 목록을 이 집합으로 거른다.
+ */
+export const SERVER_PROVIDERS: AiProvider[] = [
+  'groq',
+  'gemini',
+  'cerebras',
+  'openrouter',
+  'mistral',
+  'sambanova',
+  'nvidia',
+  'together',
+  'github',
 ];

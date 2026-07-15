@@ -26,6 +26,8 @@ import { playSound } from '@/lib/sound';
 import type { SoundEvent } from '@/lib/sound';
 import { readingTime } from '@/lib/utils';
 import { useApiKeyStore } from '@/store/api-key';
+import { useEmbedAuthStore } from '@/store/embed-auth';
+import { resolveKeys } from '@/lib/ai/access';
 import { useProfileStore } from '@/store/profile';
 import { useSessionsStore } from '@/store/sessions';
 import type { Conclusion } from '@/lib/prompts/orchestrator';
@@ -331,7 +333,11 @@ export function useDebate(sessionId: string): UseDebateReturn {
   const updateSessionProvider = useSessionsStore((s) => s.updateSessionProvider);
 
   const keys = useApiKeyStore((s) => s.keys);
-  const hasAnyKey = Object.values(keys).some((k) => !!k);
+  // 서버 모드(임베드 로그인)면 BYOK 키 없이도 사용 가능.
+  const serverMode = useEmbedAuthStore(
+    (s) => !!s.ticket && s.serverProviders.length > 0,
+  );
+  const hasAnyKey = serverMode || Object.values(keys).some((k) => !!k);
 
   const safeMessages = useMemo<readonly Message[]>(
     () => messages ?? [],
@@ -435,7 +441,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
 
     // 실행 시점의 최신 store 스냅샷 — 생성 직전 추가된 메모/발언까지 포함.
     const startState = useSessionsStore.getState();
-    const liveKeys = useApiKeyStore.getState().keys;
+    const liveKeys = resolveKeys();
     const session = startState.sessions[sessionId];
     const cast = startState.sessionCast?.[sessionId] ?? [];
     const hasKey = Object.values(liveKeys).some(Boolean);
@@ -526,6 +532,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
               topic: pending.topic,
               transcript,
               isFirst: pending.isFirst,
+              miContext: session.miContext,
               signal: controller.signal,
               onTurn,
             });
@@ -539,6 +546,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
             topic: pending.topic,
             transcript,
             isFirst: pending.isFirst,
+            miContext: session.miContext,
           }).then((chunk) => {
             chunk.turns.forEach((t, i) => onTurn(t, i));
             return chunk;
@@ -550,13 +558,11 @@ export function useDebate(sessionId: string): UseDebateReturn {
           liveKeys,
           makeCall,
           {
-            onFallback: (from, to) => {
+            onFallback: () => {
               // 이전 시도에서 흘러나간 턴 폐기 후 처음부터 재연출(원칙 4).
+              // 공급사 전환은 사용자에게 알리지 않는다 — 불안만 조성하므로 조용히 처리.
+              // (전환 이력은 접이식 사용량 인디케이터에서 확인 가능.)
               resetLiveQueue();
-              toast.info(
-                `장면을 다시 연출합니다 — ${PROVIDERS[from].displayName} 한도 → ${PROVIDERS[to].displayName} 전환`,
-                { duration: 4_000 },
-              );
             },
           },
         );
@@ -686,7 +692,12 @@ export function useDebate(sessionId: string): UseDebateReturn {
 
     if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
     scheduledIndexRef.current = revealedTurnCount;
-    const delay = readingTime(nextTurn.content) / speed;
+    // 타자기(TypewriterText)가 28ms/자로 타이핑한다. 긴 발언은 readingTime 상한(6000ms)이
+    // 타이핑 시간보다 짧아 다음 턴이 타이핑을 끊어버린다 → 한 번에 뿌려진 것처럼 보인다.
+    // 딜레이를 "타이핑 완료 + 짧은 여운" 이상으로 보장해, 매 발언이 끝까지 타이핑된 뒤
+    // 다음 발언이 등장하게 한다.
+    const typingMs = nextTurn.content.trim().length * 28 + 400;
+    const delay = Math.max(readingTime(nextTurn.content), typingMs) / speed;
     revealTimerRef.current = setTimeout(() => {
       revealTimerRef.current = null;
       scheduledIndexRef.current = -1;
@@ -763,7 +774,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
     const handle = setTimeout(async () => {
       if (cancelled) return;
       try {
-        const liveKeys = useApiKeyStore.getState().keys;
+        const liveKeys = resolveKeys();
         const { result, usedProvider } = await runWithFallback(
           'conclude',
           liveKeys,
@@ -778,14 +789,7 @@ export function useDebate(sessionId: string): UseDebateReturn {
                 ? safeMessages.filter((m) => pins.some((p) => p.messageId === m.id))
                 : undefined,
             }),
-          {
-            onFallback: (from, to) => {
-              toast.info(
-                `결론 생성: ${PROVIDERS[from].displayName} 한도 → ${PROVIDERS[to].displayName} 로 전환`,
-                { duration: 4_000 },
-              );
-            },
-          },
+          // 공급사 전환은 조용히 처리 — 사용자에게 한도/전환 문구를 노출하지 않는다.
         );
         if (cancelled) return;
         updateSessionProvider(sessionId, usedProvider);

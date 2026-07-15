@@ -1,6 +1,5 @@
-import Link from 'next/link';
-import { Settings, ShieldCheck } from 'lucide-react';
-
+import { EmbedBridge } from '@/components/embed/EmbedBridge';
+import { MainChrome } from '@/components/embed/MainChrome';
 import { isAdminEnabled } from '@/lib/admin/auth';
 
 /**
@@ -9,8 +8,9 @@ import { isAdminEnabled } from '@/lib/admin/auth';
  *
  * 모바일 퍼스트 — 좌우 패딩 16px, 최대 너비 640px.
  *
- * 푸터에는 운영자(어드민) 진입점이 ADMIN_PASSWORD 설정된 환경에서만 노출된다.
- * 일반 사용자에게는 보이지 않으면서, 운영자 본인은 URL 외울 필요 없게.
+ * 크롬(헤더·푸터) 렌더는 MainChrome(클라이언트)이 담당 — 임베드(iframe)일 때는
+ * council 자체 로고/푸터를 숨겨 호스트(insight-out)에 자연스럽게 녹아들게 한다.
+ * 운영자 진입점은 ADMIN_PASSWORD 설정 환경에서만 노출.
  */
 export default function MainLayout({
   children,
@@ -20,35 +20,9 @@ export default function MainLayout({
   const adminEnabled = isAdminEnabled();
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-2xl flex-col px-4 sm:px-6">
-      <header className="flex items-center justify-between py-5">
-        <Link
-          href="/"
-          className="font-display text-2xl font-extrabold tracking-tighter text-text"
-        >
-          COUNCIL
-        </Link>
-        <Link
-          href="/settings"
-          aria-label="설정"
-          className="rounded-md p-2 text-text-muted transition-colors hover:bg-surface-2 hover:text-text"
-        >
-          <Settings className="size-5" />
-        </Link>
-      </header>
-      <main className="flex-1 pb-16">{children}</main>
-      <footer className="flex items-center justify-between gap-3 border-t border-border/60 py-4 text-[11px] text-text-dim">
-        <span className="font-mono">COUNCIL · BYOK 모드</span>
-        {adminEnabled && (
-          <Link
-            href="/admin"
-            className="inline-flex items-center gap-1 rounded text-text-muted/70 transition-colors hover:text-primary"
-          >
-            <ShieldCheck className="size-3" />
-            운영자
-          </Link>
-        )}
-      </footer>
-    </div>
+    <>
+      <EmbedBridge />
+      <MainChrome adminEnabled={adminEnabled}>{children}</MainChrome>
+    </>
   );
 }

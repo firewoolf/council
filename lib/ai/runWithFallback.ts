@@ -24,6 +24,7 @@ import {
   type AiProvider,
   type AiTaskRole,
 } from './providers';
+import { useUsageStore } from '@/store/usage';
 
 type ProviderCall<T> = (provider: AiProvider, apiKey: string) => Promise<T>;
 
@@ -66,6 +67,12 @@ export async function runWithFallback<T>(
 
     try {
       const result = await call(provider, apiKey);
+      // 전체 사용량 집계 — 모든 AI 호출의 단일 성공 지점.
+      try {
+        useUsageStore.getState().bump(provider);
+      } catch {
+        // 집계 실패는 메인 흐름을 끊지 않는다.
+      }
       return { result, usedProvider: provider };
     } catch (err) {
       lastErr = err;

@@ -124,8 +124,17 @@ export function buildChunkPrompt(args: {
   topic: string;
   transcript: string;
   isFirst: boolean;
+  /** insight-out MI 근거 — 있으면 참고 자료 블록으로 주입 */
+  miContext?: string;
 }): string {
-  const { concern, panel, topic, transcript, isFirst } = args;
+  const { concern, panel, topic, transcript, isFirst, miContext } = args;
+
+  const miBlock = miContext
+    ? `\n[참고 자료 — insight-out 마켓 인텔리전스]
+아래는 실제 시장 데이터다. 패널은 이 자료를 근거로 인용하며 토론하라.
+자료에 없는 수치·사실을 지어내지 말 것.
+${miContext}\n`
+    : '';
 
   const panelLines = panel
     .map((p) => {
@@ -146,7 +155,7 @@ export function buildChunkPrompt(args: {
 
   return `[고민 당사자가 들고 온 문제]
 ${concern}
-
+${miBlock}
 [패널]
 ${panelLines}
 
