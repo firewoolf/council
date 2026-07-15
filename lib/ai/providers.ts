@@ -98,8 +98,9 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     supportsStream: true,
     accent: { from: '#F55036', to: '#FF8A65' },
     freeTier: '분당 30회 / 일 14400회 무료 (Llama 3.3 70B 기준)',
-    // Groq: 초고속 + RPM 30 → 턴당 1회 호출되는 토론 발언에 최적
-    roles: ['debate'],
+    // Groq: 초고속 추론 → 발언 생성(chunk) 최적. 키 있으면 chunk 를 여기로 라우팅(대폭 단축).
+    // 구조화 출력(중첩 배열) 불안정 시 runWithFallback 이 Gemini 로 되돌린다.
+    roles: ['debate', 'chunk'],
   },
   openrouter: {
     id: 'openrouter',
@@ -141,8 +142,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     supportsStream: true,
     accent: { from: '#0F766E', to: '#5EEAD4' },
     freeTier: '일 100만 토큰 무료 (gpt-oss-120b · 고수요 시 한도 일시 축소)',
-    // Cerebras: 초고속 추론 → 토론 발언 (대안 debate provider)
-    roles: ['debate'],
+    // Cerebras: 초고속 추론 → 발언 생성(chunk) 대안. Groq 다음 순위로 chunk 처리.
+    roles: ['debate', 'chunk'],
   },
   claude: {
     id: 'claude',
