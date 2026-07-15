@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Settings, ShieldCheck } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { ArrowLeft, Settings, ShieldCheck } from 'lucide-react';
 
 import { useHasMounted } from '@/hooks/useHasMounted';
 import { isEmbedded } from '@/lib/embed/protocol';
@@ -25,6 +26,11 @@ export function MainChrome({
 }) {
   const mounted = useHasMounted();
   const embedded = mounted && isEmbedded();
+  const pathname = usePathname();
+  const router = useRouter();
+  // 임베드에선 council 헤더(로고→홈)를 숨기므로 뒤로가기 경로가 없다.
+  // 세션 화면(/session/*)은 자체 "홈으로"가 있으니 제외하고, 그 외(설정·기록 등)에만 노출.
+  const showBack = embedded && !pathname.startsWith('/session');
 
   return (
     <div
@@ -33,6 +39,17 @@ export function MainChrome({
         embedded && 'pt-2',
       )}
     >
+      {showBack && (
+        <button
+          type="button"
+          onClick={() => router.back()}
+          className="mb-1 inline-flex w-fit items-center gap-1 py-1 text-xs text-text-muted transition-colors hover:text-text"
+          aria-label="뒤로 가기"
+        >
+          <ArrowLeft className="size-3.5" />
+          뒤로
+        </button>
+      )}
       {!embedded && (
         <header className="flex items-center justify-between py-5">
           <Link
