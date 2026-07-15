@@ -47,10 +47,28 @@ export function buildTopicProposalPrompt(mi: MiBundle): string {
   const contents = mi.contents
     .slice(0, 8)
     .map((c) => `- ${c.title}${c.summary ? `: ${c.summary}` : ''}`);
+  const insights = mi.insights.map((i) =>
+    i.summary ? `- ${i.headline}: ${i.summary}` : `- ${i.headline}`,
+  );
+  const reports = mi.reports.map((r) =>
+    r.summary ? `- ${r.title}: ${r.summary}` : `- ${r.title}`,
+  );
+  const competitorReports = mi.competitorReports.map((r) =>
+    r.summary ? `- ${r.title}: ${r.summary}` : `- ${r.title}`,
+  );
+  const keywords = mi.keywords.map((k) =>
+    k.trend ? `${k.name}(${k.trend})` : k.name,
+  );
 
   const block = [
-    competitors.length ? `추적 경쟁사: ${competitors.join(', ')}` : null,
+    insights.length ? `핵심 인사이트:\n${insights.join('\n')}` : null,
     issues.length ? `뜨는 이슈:\n${issues.map((s) => `- ${s}`).join('\n')}` : null,
+    competitors.length ? `추적 경쟁사: ${competitors.join(', ')}` : null,
+    competitorReports.length
+      ? `경쟁사 주간 동향:\n${competitorReports.join('\n')}`
+      : null,
+    reports.length ? `AI 리포트:\n${reports.join('\n')}` : null,
+    keywords.length ? `키워드 분석: ${keywords.join(', ')}` : null,
     contents.length ? `최근 자료:\n${contents.join('\n')}` : null,
   ]
     .filter(Boolean)

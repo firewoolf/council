@@ -388,6 +388,14 @@ export default function NewSessionPage() {
       {step === 'input' && isEmbedded() && (
         <TopicSuggestions onPick={(topic) => void handleAnalyze(topic)} />
       )}
+      {/* 기타 — 제안 대신 직접 주제를 입력할 수도 있음(임베드에서 제안과 구분). */}
+      {step === 'input' && isEmbedded() && (
+        <div className="flex items-center gap-3 text-xs text-text-muted">
+          <div className="h-px flex-1 bg-border" />
+          기타 — 직접 주제 입력
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      )}
       {step === 'input' && embedSources.length > 0 && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">

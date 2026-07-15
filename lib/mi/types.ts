@@ -33,12 +33,36 @@ export interface MiEntity {
   mentionCount: number;
 }
 
-/** 페르소나 설계·토론 근거에 함께 쓰는 MI 번들 */
+/** 핵심 인사이트 (insight-out daily_insights) */
+export interface MiInsight {
+  headline: string;
+  summary: string | null;
+}
+
+/** AI 리포트 / 경쟁사 주간 리포트 (제목+요약 공통 형태) */
+export interface MiReport {
+  title: string;
+  summary: string | null;
+}
+
+/** 키워드 분석 결과 */
+export interface MiKeyword {
+  name: string;
+  /** 상승/하락 등 추세 표기(있으면) */
+  trend?: string | null;
+}
+
+/** 페르소나 설계·토론 근거·주제 역제안에 쓰는 MI 번들 */
 export interface MiBundle {
   query: string | null;
   contents: MiContent[];
   issues: MiIssue[];
   entities: MiEntity[];
+  /** 확장 소스 — 브릿지 미지원 시 빈 배열(전방호환) */
+  insights: MiInsight[];
+  reports: MiReport[];
+  competitorReports: MiReport[];
+  keywords: MiKeyword[];
 }
 
 export const EMPTY_MI_BUNDLE: MiBundle = {
@@ -46,10 +70,20 @@ export const EMPTY_MI_BUNDLE: MiBundle = {
   contents: [],
   issues: [],
   entities: [],
+  insights: [],
+  reports: [],
+  competitorReports: [],
+  keywords: [],
 };
 
 export function isMiBundleEmpty(b: MiBundle): boolean {
   return (
-    b.contents.length === 0 && b.issues.length === 0 && b.entities.length === 0
+    b.contents.length === 0 &&
+    b.issues.length === 0 &&
+    b.entities.length === 0 &&
+    b.insights.length === 0 &&
+    b.reports.length === 0 &&
+    b.competitorReports.length === 0 &&
+    b.keywords.length === 0
   );
 }
