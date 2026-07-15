@@ -8,6 +8,7 @@ import {
   isMiBundleEmpty,
   type MiBundle,
 } from '@/lib/mi/types';
+import type { TopicProposal } from '@/lib/prompts/topic-proposer';
 
 export interface LoadMiResult {
   configured: boolean;
@@ -108,6 +109,33 @@ export function buildMiContext(bundle: MiBundle): string {
   }
 
   return blocks.join('\n\n');
+}
+
+/**
+ * 규칙 기반 주제 제안 폴백 — LLM 불가(키 없음·실패) 시 MI 번들에서 직접 템플릿.
+ * 뜨는 이슈 + 경쟁사에서 결정형 주제를 만든다. (LLM 만큼 날카롭진 않지만 항상 동작.)
+ */
+export function fallbackTopics(bundle: MiBundle): TopicProposal[] {
+  const out: TopicProposal[] = [];
+
+  for (const issue of bundle.issues.slice(0, 3)) {
+    out.push({
+      title: `${issue.title} — 지금 대응할까, 지켜볼까`,
+      hook: issue.summary ?? '시장에서 부상 중인 이슈. 대응 시점 판단이 필요하다.',
+      category: 'issue',
+    });
+  }
+
+  const competitors = bundle.entities.filter((e) => e.isCompetitor).slice(0, 2);
+  for (const c of competitors) {
+    out.push({
+      title: `경쟁사 ${c.name} 동향 대응 — 따라갈까, 버틸까`,
+      hook: `${c.name} 관련 움직임이 감지됨(언급 ${c.mentionCount}회). 우리 대응 방향 결정.`,
+      category: 'competitor',
+    });
+  }
+
+  return out.slice(0, 5);
 }
 
 /** 배너 표시용 소스 목록 (제목 + 링크) */

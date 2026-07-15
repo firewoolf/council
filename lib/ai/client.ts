@@ -42,6 +42,12 @@ import {
   conclusionSchema,
   type Conclusion,
 } from '@/lib/prompts/orchestrator';
+import {
+  buildTopicProposalPrompt,
+  topicProposalsSchema,
+  type TopicProposal,
+} from '@/lib/prompts/topic-proposer';
+import type { MiBundle } from '@/lib/mi/types';
 import type { Message, MoveType } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
 import { PROVIDERS, type AiProvider } from './providers';
@@ -513,6 +519,31 @@ export async function recommendPersonas(args: {
       maxRetries: 1,
     });
     return object;
+  } catch (err) {
+    throw classifyAiError(args.provider, err);
+  }
+}
+
+/**
+ * MI 능동 주제 제안 — 마켓 인텔리전스에서 토론 결정거리를 뽑는다.
+ * /session/new 진입 화면(TopicSuggestions)에서 호출. 실패 시 AiCallError.
+ */
+export async function proposeTopics(args: {
+  provider: AiProvider;
+  apiKey: string;
+  mi: MiBundle;
+}): Promise<TopicProposal[]> {
+  try {
+    const model = getModel(args.provider, args.apiKey);
+    const { object } = await generateObject({
+      model,
+      schema: topicProposalsSchema,
+      prompt: buildTopicProposalPrompt(args.mi),
+      temperature: TEMPERATURE.recommend,
+      maxRetries: 1,
+      maxTokens: 900,
+    });
+    return object.proposals;
   } catch (err) {
     throw classifyAiError(args.provider, err);
   }
