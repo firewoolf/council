@@ -15,7 +15,10 @@ import {
   type MiBundle,
   type MiContent,
   type MiEntity,
+  type MiInsight,
   type MiIssue,
+  type MiKeyword,
+  type MiReport,
 } from '@/lib/mi/types';
 
 const BASE_URL = process.env.INSIGHT_OUT_API_URL ?? '';
@@ -93,18 +96,81 @@ export async function listEntities(opts: {
   return data?.items ?? [];
 }
 
+// ── 확장 소스 (브릿지 미지원 시 빈 배열 — 전방호환) ──────────────
+export async function listInsights(opts: {
+  query?: string;
+  limit?: number;
+}): Promise<MiInsight[]> {
+  const data = await call<{ items: MiInsight[] }>('insights', {
+    q: opts.query,
+    limit: opts.limit,
+  });
+  return data?.items ?? [];
+}
+
+export async function listReports(opts: {
+  query?: string;
+  limit?: number;
+}): Promise<MiReport[]> {
+  const data = await call<{ items: MiReport[] }>('reports', {
+    q: opts.query,
+    limit: opts.limit,
+  });
+  return data?.items ?? [];
+}
+
+export async function listCompetitorReports(opts: {
+  limit?: number;
+}): Promise<MiReport[]> {
+  const data = await call<{ items: MiReport[] }>('competitor', {
+    limit: opts.limit,
+  });
+  return data?.items ?? [];
+}
+
+export async function listKeywords(opts: {
+  limit?: number;
+}): Promise<MiKeyword[]> {
+  const data = await call<{ items: MiKeyword[] }>('keywords', {
+    limit: opts.limit,
+  });
+  return data?.items ?? [];
+}
+
 /**
- * 페르소나 설계·토론 근거용 MI 번들 조회.
- * query(고민 텍스트)로 관련 콘텐츠·이슈를 좁히고, 경쟁사 상위 목록을 함께 가져온다.
+ * 페르소나 설계·토론 근거·주제 역제안용 MI 번들 조회.
+ * 콘텐츠·이슈·경쟁사에 더해 핵심 인사이트·AI 리포트·경쟁사 주간·키워드까지 병렬 조회.
+ * (확장 소스는 브릿지 미지원 시 빈 배열 — 기존 소스만으로도 정상 동작.)
  */
 export async function fetchMiBundle(query?: string): Promise<MiBundle> {
   if (!isMiConfigured()) return { ...EMPTY_MI_BUNDLE, query: query ?? null };
 
-  const [contents, issues, entities] = await Promise.all([
+  const [
+    contents,
+    issues,
+    entities,
+    insights,
+    reports,
+    competitorReports,
+    keywords,
+  ] = await Promise.all([
     searchContents({ query, days: 60, limit: 8 }),
     listIssues({ query, status: 'published', limit: 6 }),
     listEntities({ competitorOnly: true, limit: 8 }),
+    listInsights({ query, limit: 6 }),
+    listReports({ query, limit: 5 }),
+    listCompetitorReports({ limit: 4 }),
+    listKeywords({ limit: 12 }),
   ]);
 
-  return { query: query ?? null, contents, issues, entities };
+  return {
+    query: query ?? null,
+    contents,
+    issues,
+    entities,
+    insights,
+    reports,
+    competitorReports,
+    keywords,
+  };
 }
