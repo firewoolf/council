@@ -74,6 +74,14 @@ export const SIGNATURE_LINES: Record<string, string> = {
   'growth-marketer':     '지금 안 움직이면 6개월 뒤엔 늦습니다.',
   'domain-expert':       '그 분야의 *진짜 문제* 는 다른 데 있어요.',
   'facilitator':         '우리가 *진짜로* 풀어야 할 질문이 뭡니까?',
+  // insight-out MI 도메인 확장 (AICC·AIDC·소버린·telco·재계 관점)
+  'ai-infra-visionary':    '사는 걸 논하지 말고, 무엇을 지을지를 논합시다.',
+  'conglomerate-chairman': '이걸 쥐고 있습니까, 빌리고 있습니까?',
+  'telco-group-chairman':  '지금 캐시카우가 5년 뒤에도 캐시카우입니까?',
+  'telco-strategist':      'ARPU로 설명 안 되면 그건 취미입니다.',
+  'sovereign-ai-policy':   '그 데이터는 누구의 법을 받습니까?',
+  'aidc-infra-lead':       '전력이 없으면 그건 일정이 아니라 희망입니다.',
+  'aicc-practice-lead':    '상담사가 안 쓰면 그 AI는 없는 겁니다.',
 };
 
 /** ⑤-5a-2 — trait 값 → 능력치 라벨 매핑. */
@@ -116,6 +124,14 @@ export const STAT_SCORES: Record<string, StatTriple> = {
   'growth-marketer':     { stanceAxis: 5, lens: 4, expression: 3 },
   'domain-expert':       { stanceAxis: 3, lens: 5, expression: 4 },
   'facilitator':         { stanceAxis: 4, lens: 3, expression: 5 },
+  // insight-out MI 도메인 확장
+  'ai-infra-visionary':    { stanceAxis: 5, lens: 4, expression: 5 },
+  'conglomerate-chairman': { stanceAxis: 4, lens: 4, expression: 2 },
+  'telco-group-chairman':  { stanceAxis: 4, lens: 5, expression: 3 },
+  'telco-strategist':      { stanceAxis: 5, lens: 5, expression: 3 },
+  'sovereign-ai-policy':   { stanceAxis: 5, lens: 5, expression: 3 },
+  'aidc-infra-lead':       { stanceAxis: 5, lens: 4, expression: 3 },
+  'aicc-practice-lead':    { stanceAxis: 4, lens: 5, expression: 3 },
 };
 
 /** generated/custom 폴백 — 정의 trait(stance)만 약간 높게. */
