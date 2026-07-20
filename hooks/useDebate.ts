@@ -834,6 +834,11 @@ export function useDebate(sessionId: string): UseDebateReturn {
   // ───────────────────────────── 액션
   const start = useCallback(() => {
     setError(null);
+    // 새로고침 복원 effect 잠금 — 이 세션에서 직접 시작했으므로 "복원"할 상태가 없다.
+    // 잠그지 않으면 첫 청크가 store 에 저장되는 순간(safeChunks 0→1) 복원 effect 가
+    // 오발동해 revealedTurnCount 를 전 턴으로 올려버린다 → 첫 장면만 타이핑 없이
+    // 한꺼번에 출력되는 버그(2번째 청크부터는 hydratedRef 가 true 라 정상).
+    hydratedRef.current = true;
 
     // ⑤-5e — 사회자 모두 발언을 즉시 메시지로 추가 (generating 전 단계, LLM 호출 없음).
     // facilitator 가 없는 cast 는 throw 없이 스킵 (안전 가드).
