@@ -226,6 +226,13 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
   },
 };
 
+/**
+ * 서버키 프록시 센티넬 — keys 맵의 값이 이것이면 BYOK 가 아니라 서버 프록시로 호출한다.
+ * (getModel 이 이 값을 보고 baseURL 을 /api/ai/* 로 전환.)
+ * 순수 모듈에 두어야 providers/access/client/store 어디서든 순환 없이 참조 가능.
+ */
+export const SERVER_KEY_SENTINEL = '__council_server__';
+
 /** 키 형식 1차 검증 (정규식만 — 실제 유효성은 ping API로 확인) */
 export function validateKeyFormat(provider: AiProvider, key: string): boolean {
   return PROVIDERS[provider].keyPattern.test(key.trim());
@@ -239,7 +246,12 @@ export function validateKeyFormat(provider: AiProvider, key: string): boolean {
 export function listAvailableProviders(
   keys: Partial<Record<AiProvider, string>>,
 ): AiProvider[] {
-  return BYOK_PROVIDERS.filter((p) => !!keys[p]);
+  // 서버 모드(센티넬 키)면 후보를 BYOK 4종으로 좁히지 않는다 — 서버에 키가 등록된
+  // 공급사 전체(SERVER_PROVIDERS 9종)가 폴백 풀이 된다. 그러지 않으면 Mistral 등
+  // 서버 전용 공급사는 env 에 키를 넣어도 영영 라우팅되지 않는다.
+  const serverMode = Object.values(keys).some((v) => v === SERVER_KEY_SENTINEL);
+  const pool = serverMode ? SERVER_PROVIDERS : BYOK_PROVIDERS;
+  return pool.filter((p) => !!keys[p]);
 }
 
 /**
