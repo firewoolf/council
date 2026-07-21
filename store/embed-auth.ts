@@ -12,8 +12,12 @@ import { create } from 'zustand';
  * 지속 저장 안 함(persist X) — 티켓은 짧은 수명이고 매 세션 임베드가 다시 넘긴다.
  */
 
-/** getModel 에 "서버 모드로 호출하라"는 신호로 쓰는 키 센티넬. */
-export const SERVER_KEY_SENTINEL = '__council_server__';
+/**
+ * getModel 에 "서버 모드로 호출하라"는 신호로 쓰는 키 센티넬.
+ * 실제 정의는 순수 모듈(lib/ai/providers)에 있다 — listAvailableProviders 가
+ * 서버 모드를 판별해야 하는데, 스토어를 import 하면 순환이 된다.
+ */
+export { SERVER_KEY_SENTINEL } from '@/lib/ai/providers';
 
 interface EmbedAuthState {
   /** insight-out 이 발급한 로그인 티켓 (HMAC 서명) */
