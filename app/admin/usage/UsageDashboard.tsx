@@ -121,14 +121,16 @@ export function UsageDashboard() {
 
 function sessionCost(session: SessionUsage): number | null {
   let total = 0;
+  let providerCount = 0;
   for (const provider of Object.keys(session.providers) as AiProvider[]) {
     const bucket = session.providers[provider];
     if (!bucket || bucket.n === 0) continue;
+    providerCount += 1;
     const cost = estimateCostUsd(provider, bucket);
     if (cost === null) return null;
     total += cost;
   }
-  return total;
+  return providerCount === 0 ? null : total;
 }
 
 function providerNames(session: SessionUsage): string {
@@ -143,14 +145,16 @@ function kindCost(
   byProviderKind: ReturnType<typeof useUsageStore.getState>['byProviderKind'],
 ): number | null {
   let total = 0;
+  let providerCount = 0;
   for (const provider of Object.keys(byProviderKind) as AiProvider[]) {
     const providerBucket = byProviderKind[provider]?.[kind];
     if (!providerBucket || providerBucket.n === 0) continue;
+    providerCount += 1;
     const cost = estimateCostUsd(provider, providerBucket);
     if (cost === null) return null;
     total += cost;
   }
-  return total;
+  return providerCount === 0 ? null : total;
 }
 
 function formatNumber(value: number): string { return Math.round(value).toLocaleString('ko-KR'); }

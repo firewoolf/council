@@ -194,7 +194,7 @@ export const useUsageStore = create<UsageState>()(
           total: s.total ?? 0,
           lastProvider: s.lastProvider ?? null,
           currentSessionId: null,
-          byKind: s.byKind ?? {},
+          byKind: from < 3 ? {} : (s.byKind ?? {}),
           byProviderKind: from < 3 ? {} : (s.byProviderKind ?? {}),
           bySession: from < 3 ? {} : (s.bySession ?? {}),
         };
