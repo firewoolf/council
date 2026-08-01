@@ -32,7 +32,7 @@ export interface UsageBucket {
 export interface SessionUsage extends UsageBucket {
   byKind: Partial<Record<UsageKind, UsageBucket>>;
   /** 이 세션에서 실제로 쓰인 공급사들 */
-  providers: Partial<Record<AiProvider, number>>;
+  providers: Partial<Record<AiProvider, UsageBucket>>;
   /** 첫 호출 시각(ms) — 정렬·LRU 용 */
   startedAt: number;
 }
@@ -56,6 +56,9 @@ export interface UsageState {
   lastProvider: AiProvider | null;
   currentSessionId: string | null;
   byKind: Partial<Record<UsageKind, UsageBucket>>;
+  byProviderKind: Partial<
+    Record<AiProvider, Partial<Record<UsageKind, UsageBucket>>>
+  >;
   bySession: Record<string, SessionUsage>;
 
   bump: (provider: AiProvider) => void;
@@ -101,6 +104,7 @@ export const useUsageStore = create<UsageState>()(
       lastProvider: null,
       currentSessionId: null,
       byKind: {},
+      byProviderKind: {},
       bySession: {},
 
       bump: (provider) =>
@@ -121,8 +125,16 @@ export const useUsageStore = create<UsageState>()(
             ...s.byKind,
             [kind]: addUsage(s.byKind[kind], inTok, outTok, cachedTok),
           };
+          const providerKinds = s.byProviderKind[provider] ?? {};
+          const byProviderKind = {
+            ...s.byProviderKind,
+            [provider]: {
+              ...providerKinds,
+              [kind]: addUsage(providerKinds[kind], inTok, outTok, cachedTok),
+            },
+          };
 
-          if (s.currentSessionId === null) return { byKind };
+          if (s.currentSessionId === null) return { byKind, byProviderKind };
 
           const sessionId = s.currentSessionId;
           const previous = s.bySession[sessionId];
@@ -140,7 +152,12 @@ export const useUsageStore = create<UsageState>()(
             },
             providers: {
               ...base.providers,
-              [provider]: (base.providers[provider] ?? 0) + 1,
+              [provider]: addUsage(
+                base.providers[provider],
+                inTok,
+                outTok,
+                cachedTok,
+              ),
             },
             startedAt: base.startedAt,
           };
@@ -152,7 +169,7 @@ export const useUsageStore = create<UsageState>()(
               .slice(0, sessionIds.length - MAX_SESSIONS)
               .forEach((id) => delete bySession[id]);
           }
-          return { byKind, bySession };
+          return { byKind, byProviderKind, bySession };
         }),
 
       reset: () =>
@@ -162,22 +179,42 @@ export const useUsageStore = create<UsageState>()(
           lastProvider: null,
           currentSessionId: null,
           byKind: {},
+          byProviderKind: {},
           bySession: {},
         }),
     }),
     {
       name: 'council-usage',
       storage: createJSONStorage(() => localStorage),
-      version: 2,
-      migrate: (persisted) => {
+      version: 3,
+      migrate: (persisted, from) => {
         const s = (persisted ?? {}) as Partial<UsageState>;
+        const bySession = Object.fromEntries(
+          Object.entries(s.bySession ?? {}).map(([sessionId, session]) => [
+            sessionId,
+            {
+              ...session,
+              providers: Object.fromEntries(
+                Object.entries(session.providers ?? {}).map(
+                  ([provider, value]) => [
+                    provider,
+                    from < 3 && typeof value === 'number'
+                      ? { ...EMPTY_BUCKET, n: value }
+                      : value,
+                  ],
+                ),
+              ),
+            },
+          ]),
+        );
         return {
           calls: s.calls ?? {},
           total: s.total ?? 0,
           lastProvider: s.lastProvider ?? null,
           currentSessionId: null,
           byKind: s.byKind ?? {},
-          bySession: s.bySession ?? {},
+          byProviderKind: s.byProviderKind ?? {},
+          bySession,
         };
       },
       partialize: (s) => ({
@@ -185,6 +222,7 @@ export const useUsageStore = create<UsageState>()(
         total: s.total,
         lastProvider: s.lastProvider,
         byKind: s.byKind,
+        byProviderKind: s.byProviderKind,
         bySession: s.bySession,
       }),
     },

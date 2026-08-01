@@ -86,11 +86,15 @@ function formatTokens(value: number): string {
 
 function formatSessionCost(session: SessionUsage): string {
   const providers = (Object.keys(session.providers) as AiProvider[]).filter(
-    (provider) => (session.providers[provider] ?? 0) > 0,
+    (provider) => (session.providers[provider]?.n ?? 0) > 0,
   );
-  if (providers.length !== 1) return '원가 미확인';
-  const cost = estimateCostUsd(providers[0]!, session);
-  return cost === null
+  let cost = 0;
+  for (const provider of providers) {
+    const providerCost = estimateCostUsd(provider, session.providers[provider]!);
+    if (providerCost === null) return '원가 미확인';
+    cost += providerCost;
+  }
+  return providers.length === 0
     ? '원가 미확인'
     : `약 ${Math.round(cost * USD_TO_KRW).toLocaleString('ko-KR')}원`;
 }

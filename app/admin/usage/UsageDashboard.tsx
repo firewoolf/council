@@ -15,19 +15,23 @@ import {
 const KIND_ORDER: UsageKind[] = [
   'chunk', 'conclusion', 'clarify', 'panel', 'recommend', 'topics', 'mirror', 'ping',
 ];
+const ONBOARDING_KINDS: UsageKind[] = ['clarify', 'panel', 'recommend', 'topics'];
 const ESTIMATES = [
   ['청크 in/회', 5380, 'chunkIn'],
   ['청크 out/회', 900, 'chunkOut'],
-  ['세션 in', 42700, 'sessionIn'],
-  ['세션 out', 7550, 'sessionOut'],
+  // §0 표의 generateChunk(32,280) + generateConclusion(4,600) +
+  // generateMirrorProfile(500) 입력 합계. 온보딩 호출은 세션 바인딩 전이라 제외한다.
+  ['세션 in (청크+결론+거울)', 37380, 'sessionIn'],
+  // 같은 세 행의 출력 합계: 5,400 + 700 + 250.
+  ['세션 out (청크+결론+거울)', 6350, 'sessionOut'],
   ['세션당 청크 수', 6, 'chunks'],
 ] as const;
 
 export function UsageDashboard() {
   const mounted = useHasMounted();
   const byKind = useUsageStore((s) => s.byKind);
+  const byProviderKind = useUsageStore((s) => s.byProviderKind);
   const bySession = useUsageStore((s) => s.bySession);
-  const calls = useUsageStore((s) => s.calls);
   const reset = useUsageStore((s) => s.reset);
 
   if (!mounted) return null;
@@ -45,8 +49,12 @@ export function UsageDashboard() {
     ? sessionCosts.reduce<number>((total, cost) => total + (cost ?? 0), 0) / sessionCount
     : null;
   const chunk = byKind.chunk;
-  const globalProviders = (Object.keys(calls) as AiProvider[]).filter(
-    (provider) => (calls[provider] ?? 0) > 0,
+  const onboarding = ONBOARDING_KINDS.reduce(
+    (total, kind) => ({
+      inTok: total.inTok + (byKind[kind]?.inTok ?? 0),
+      outTok: total.outTok + (byKind[kind]?.outTok ?? 0),
+    }),
+    { inTok: 0, outTok: 0 },
   );
   const actuals = {
     chunkIn: chunk?.n ? chunk.inTok / chunk.n : null,
@@ -84,15 +92,17 @@ export function UsageDashboard() {
         <tbody>{ESTIMATES.map(([label, estimate, key]) => {
           const actual = actuals[key];
           return <tr key={label}><Td>{label}</Td><Td>{formatNumber(estimate)}</Td><Td>{actual === null ? '—' : formatNumber(actual)}</Td><Td>{actual === null ? '—' : `${(((actual - estimate) / estimate) * 100).toFixed(1)}%`}</Td></tr>;
-        })}</tbody>
+        })}
+          <tr><Td>세션 밖(온보딩)</Td><Td>—</Td><Td>in {formatNumber(onboarding.inTok)} / out {formatNumber(onboarding.outTok)}</Td><Td>—</Td></tr>
+        </tbody>
       </TableSection>
 
       <TableSection title="kind별 누적">
         <thead><tr><Th>kind</Th><Th>호출 수</Th><Th>평균 in</Th><Th>평균 out</Th><Th>캐시 적중</Th><Th>누적 원가</Th></tr></thead>
         <tbody>{KIND_ORDER.map((kind) => {
           const bucket = byKind[kind];
-          const cost = bucket && globalProviders.length === 1
-            ? estimateCostUsd(globalProviders[0]!, bucket)
+          const cost = bucket
+            ? kindCost(kind, byProviderKind)
             : null;
           return <tr key={kind}><Td>{kind}</Td><Td>{bucket?.n ?? 0}</Td><Td>{bucket?.n ? formatNumber(bucket.inTok / bucket.n) : '—'}</Td><Td>{bucket?.n ? formatNumber(bucket.outTok / bucket.n) : '—'}</Td><Td>{formatNumber(bucket?.cachedTok ?? 0)}</Td><Td>{bucket ? <CostValue usd={cost} /> : '—'}</Td></tr>;
         })}</tbody>
@@ -110,15 +120,37 @@ export function UsageDashboard() {
 }
 
 function sessionCost(session: SessionUsage): number | null {
-  const providers = (Object.keys(session.providers) as AiProvider[]).filter((p) => (session.providers[p] ?? 0) > 0);
-  return providers.length === 1 ? estimateCostUsd(providers[0]!, session) : null;
+  let total = 0;
+  for (const provider of Object.keys(session.providers) as AiProvider[]) {
+    const bucket = session.providers[provider];
+    if (!bucket || bucket.n === 0) continue;
+    const cost = estimateCostUsd(provider, bucket);
+    if (cost === null) return null;
+    total += cost;
+  }
+  return total;
 }
 
 function providerNames(session: SessionUsage): string {
   return (Object.keys(session.providers) as AiProvider[])
-    .filter((p) => (session.providers[p] ?? 0) > 0)
-    .map((p) => `${PROVIDERS[p].displayName} ${session.providers[p]}회`)
+    .filter((p) => (session.providers[p]?.n ?? 0) > 0)
+    .map((p) => `${PROVIDERS[p].displayName} ${session.providers[p]!.n}회`)
     .join(', ') || '—';
+}
+
+function kindCost(
+  kind: UsageKind,
+  byProviderKind: ReturnType<typeof useUsageStore.getState>['byProviderKind'],
+): number | null {
+  let total = 0;
+  for (const provider of Object.keys(byProviderKind) as AiProvider[]) {
+    const providerBucket = byProviderKind[provider]?.[kind];
+    if (!providerBucket || providerBucket.n === 0) continue;
+    const cost = estimateCostUsd(provider, providerBucket);
+    if (cost === null) return null;
+    total += cost;
+  }
+  return total;
 }
 
 function formatNumber(value: number): string { return Math.round(value).toLocaleString('ko-KR'); }
