@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, FileText, History, Users } from 'lucide-react';
+import { Activity, ArrowRight, FileText, History, Users } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
 import { isEditEnabled } from '@/lib/admin/github';
@@ -46,6 +46,13 @@ export default function AdminDashboardPage() {
           title="공통 프롬프트"
           meta="굴복 금지 규칙 / 출력 가이드"
           description="모든 페르소나에 공통 적용되는 베이스 프롬프트와 출력 가이드를 관리합니다."
+        />
+        <AdminCard
+          href="/admin/usage"
+          icon={<Activity className="size-5 text-primary" />}
+          title="토큰 사용량"
+          meta="추정 대 실측 / 세션별 원가"
+          description="AI 호출의 입력·출력·캐시 토큰과 근사 원가를 확인합니다."
         />
         {isEditEnabled() && (
           <AdminCard

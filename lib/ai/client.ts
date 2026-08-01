@@ -53,6 +53,36 @@ import type { CastMember } from '@/types/persona';
 import { PROVIDERS, type AiProvider } from './providers';
 import { AiCallError, classifyAiError } from './errors';
 import { SERVER_KEY_SENTINEL, useEmbedAuthStore } from '@/store/embed-auth';
+import { useUsageStore } from '@/store/usage';
+import type { UsageKind } from '@/store/usage';
+
+function readCachedTokens(providerMetadata: unknown): number | undefined {
+  if (!providerMetadata || typeof providerMetadata !== 'object') return undefined;
+  const google = (providerMetadata as Record<string, unknown>).google;
+  if (!google || typeof google !== 'object') return undefined;
+  const value = (google as Record<string, unknown>).cachedContentTokenCount;
+  return typeof value === 'number' ? value : undefined;
+}
+
+/** 계측 보고 — 절대 throw 하지 않는다. 실패해도 토론은 흐른다. */
+function meter(
+  provider: AiProvider,
+  kind: UsageKind,
+  usage: { promptTokens?: number; completionTokens?: number } | undefined,
+  providerMetadata?: unknown,
+): void {
+  try {
+    useUsageStore.getState().report({
+      provider,
+      kind,
+      promptTokens: usage?.promptTokens,
+      completionTokens: usage?.completionTokens,
+      cachedTokens: readCachedTokens(providerMetadata),
+    });
+  } catch {
+    // 계측 실패는 메인 흐름과 무관 (runWithFallback bump 와 동일 정책).
+  }
+}
 
 /**
  * 서버 모드 감지 — apiKey 가 센티넬이면 BYOK 대신 council 서버 프록시(/api/ai/*)로 호출.
@@ -349,7 +379,7 @@ export async function generateChunk(args: {
 }): Promise<Chunk> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: chunkSchema,
       system: CHUNK_SYSTEM_PROMPT,
@@ -366,6 +396,7 @@ export async function generateChunk(args: {
       // P-A-2 장면 비트가 3~5턴 구조를 충분히 완결할 수 있도록 안전 마진을 둔다.
       maxTokens: 1900,
     });
+    meter(args.provider, 'chunk', usage, providerMetadata);
     const { chunk } = sanitizeChunk(object);
     return chunk;
   } catch (err) {
@@ -490,6 +521,13 @@ export async function streamChunk(args: {
 
     const final = await result.object; // zod 최종 검증 — 실패 시 throw → 폴백
     const { chunk } = sanitizeChunk(final);
+    try {
+      const usage = await result.usage;
+      const pm = await result.providerMetadata;
+      meter(args.provider, 'chunk', usage, pm);
+    } catch {
+      // abort·타임아웃이면 usage 가 안 온다. 무시 — 토론은 이미 완성됐다.
+    }
     // 마지막 턴 + (스트림 중 미확정으로 남은 턴) 확정 콜백.
     for (let i = confirmed; i < chunk.turns.length; i++) {
       args.onTurn(chunk.turns[i]!, i);
@@ -511,13 +549,14 @@ export async function recommendPersonas(args: {
 }): Promise<Recommendation> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: recommendationSchema,
       prompt: buildRecommenderPrompt(args.concern),
       temperature: TEMPERATURE.recommend,
       maxRetries: 1,
     });
+    meter(args.provider, 'recommend', usage, providerMetadata);
     return object;
   } catch (err) {
     throw classifyAiError(args.provider, err);
@@ -535,7 +574,7 @@ export async function proposeTopics(args: {
 }): Promise<TopicProposal[]> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: topicProposalsSchema,
       prompt: buildTopicProposalPrompt(args.mi),
@@ -543,6 +582,7 @@ export async function proposeTopics(args: {
       maxRetries: 1,
       maxTokens: 900,
     });
+    meter(args.provider, 'topics', usage, providerMetadata);
     return object.proposals;
   } catch (err) {
     throw classifyAiError(args.provider, err);
@@ -561,13 +601,14 @@ export async function designPanel(args: {
 }): Promise<PanelDesign> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: panelDesignSchema,
       prompt: buildPanelDesignPrompt(args.concern),
       temperature: TEMPERATURE.recommend,
       maxRetries: 1,
     });
+    meter(args.provider, 'panel', usage, providerMetadata);
     return object;
   } catch (err) {
     throw classifyAiError(args.provider, err);
@@ -586,7 +627,7 @@ export async function clarifyConcern(args: {
 }): Promise<ClarifyQuestions> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: clarifyQuestionsSchema,
       prompt: buildClarifyPrompt(args.concern, args.mirror),
@@ -594,6 +635,7 @@ export async function clarifyConcern(args: {
       maxRetries: 1,
       maxTokens: 600,
     });
+    meter(args.provider, 'clarify', usage, providerMetadata);
     return object;
   } catch (err) {
     throw classifyAiError(args.provider, err);
@@ -609,7 +651,7 @@ export async function generateMirrorProfile(args: {
 }): Promise<MirrorProfileResult> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: mirrorProfileSchema,
       prompt: buildMirrorProfilePrompt({
@@ -620,6 +662,7 @@ export async function generateMirrorProfile(args: {
       maxRetries: 1,
       maxTokens: 350,
     });
+    meter(args.provider, 'mirror', usage, providerMetadata);
     return object;
   } catch (err) {
     throw classifyAiError(args.provider, err);
@@ -667,7 +710,7 @@ export async function generateConclusion(args: {
 }): Promise<Conclusion> {
   try {
     const model = getModel(args.provider, args.apiKey);
-    const { object } = await generateObject({
+    const { object, usage, providerMetadata } = await generateObject({
       model,
       schema: conclusionSchema,
       prompt: buildConclusionPrompt(
@@ -679,6 +722,7 @@ export async function generateConclusion(args: {
       temperature: TEMPERATURE.conclusion,
       maxRetries: 1,
     });
+    meter(args.provider, 'conclusion', usage, providerMetadata);
     const messageIds = new Set(args.messages.map((m) => m.id));
     const castIds = new Set(args.cast.map((c) => c.id));
     return sanitizeConclusion(object, messageIds, castIds);
