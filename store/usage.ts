@@ -189,32 +189,14 @@ export const useUsageStore = create<UsageState>()(
       version: 3,
       migrate: (persisted, from) => {
         const s = (persisted ?? {}) as Partial<UsageState>;
-        const bySession = Object.fromEntries(
-          Object.entries(s.bySession ?? {}).map(([sessionId, session]) => [
-            sessionId,
-            {
-              ...session,
-              providers: Object.fromEntries(
-                Object.entries(session.providers ?? {}).map(
-                  ([provider, value]) => [
-                    provider,
-                    from < 3 && typeof value === 'number'
-                      ? { ...EMPTY_BUCKET, n: value }
-                      : value,
-                  ],
-                ),
-              ),
-            },
-          ]),
-        );
         return {
           calls: s.calls ?? {},
           total: s.total ?? 0,
           lastProvider: s.lastProvider ?? null,
           currentSessionId: null,
           byKind: s.byKind ?? {},
-          byProviderKind: s.byProviderKind ?? {},
-          bySession,
+          byProviderKind: from < 3 ? {} : (s.byProviderKind ?? {}),
+          bySession: from < 3 ? {} : (s.bySession ?? {}),
         };
       },
       partialize: (s) => ({
