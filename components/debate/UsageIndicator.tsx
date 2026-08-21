@@ -4,8 +4,9 @@ import { useState } from 'react';
 import { Activity, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { PROVIDERS, type AiProvider } from '@/lib/ai/providers';
+import { estimateCostUsd, USD_TO_KRW } from '@/lib/ai/pricing';
 import { useHasMounted } from '@/hooks/useHasMounted';
-import { useUsageStore } from '@/store/usage';
+import { useUsageStore, type SessionUsage } from '@/store/usage';
 import { cn } from '@/lib/utils';
 
 /**
@@ -21,6 +22,10 @@ export function UsageIndicator({ className }: { className?: string }) {
   const total = useUsageStore((s) => s.total);
   const calls = useUsageStore((s) => s.calls);
   const lastProvider = useUsageStore((s) => s.lastProvider);
+  const currentSessionId = useUsageStore((s) => s.currentSessionId);
+  const currentSession = useUsageStore((s) =>
+    s.currentSessionId ? s.bySession[s.currentSessionId] : undefined,
+  );
 
   if (!mounted || total === 0) return null;
 
@@ -63,8 +68,33 @@ export function UsageIndicator({ className }: { className?: string }) {
           <p className="pt-1 text-[10px] leading-relaxed text-text-muted/60">
             공급사 무료 한도에 도달하면 다른 공급사로 자동 전환됩니다.
           </p>
+          {currentSessionId && currentSession && (
+            <p className="border-t border-border pt-2 text-[11px] text-text-muted">
+              이번 회의 · 입력 {formatTokens(currentSession.inTok)} / 출력{' '}
+              {formatTokens(currentSession.outTok)} · {formatSessionCost(currentSession)}
+            </p>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+function formatTokens(value: number): string {
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : value.toLocaleString('ko-KR');
+}
+
+function formatSessionCost(session: SessionUsage): string {
+  const providers = (Object.keys(session.providers) as AiProvider[]).filter(
+    (provider) => (session.providers[provider]?.n ?? 0) > 0,
+  );
+  let cost = 0;
+  for (const provider of providers) {
+    const providerCost = estimateCostUsd(provider, session.providers[provider]!);
+    if (providerCost === null) return '원가 미확인';
+    cost += providerCost;
+  }
+  return providers.length === 0
+    ? '원가 미확인'
+    : `약 ${Math.round(cost * USD_TO_KRW).toLocaleString('ko-KR')}원`;
 }

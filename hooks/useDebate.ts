@@ -30,6 +30,7 @@ import { useEmbedAuthStore } from '@/store/embed-auth';
 import { resolveKeys } from '@/lib/ai/access';
 import { useProfileStore } from '@/store/profile';
 import { useSessionsStore } from '@/store/sessions';
+import { useUsageStore } from '@/store/usage';
 import type { Conclusion } from '@/lib/prompts/orchestrator';
 import type { ChunkMeta, DirectionAction, Message, NextTopicChoice } from '@/types/debate';
 import type { CastMember } from '@/types/persona';
@@ -320,6 +321,11 @@ function buildTranscript(
 }
 
 export function useDebate(sessionId: string): UseDebateReturn {
+  useEffect(() => {
+    useUsageStore.getState().setSession(sessionId);
+    return () => useUsageStore.getState().setSession(null);
+  }, [sessionId]);
+
   const session = useSessionsStore((s) => s.sessions[sessionId]);
   const cast = useSessionsStore((s) => s.sessionCast?.[sessionId] ?? EMPTY_CAST);
   const messages = useSessionsStore((s) => s.messages[sessionId]);
