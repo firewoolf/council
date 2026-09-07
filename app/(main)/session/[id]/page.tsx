@@ -325,6 +325,7 @@ export default function SessionRoomPage() {
             speed={speed}
             progress={progress}
             isStreaming={isStreaming}
+            sessionId={id}
             onChooseTopic={actions.chooseTopic}
             onCustomTopic={actions.submitCustomTopic}
             onConclude={actions.conclude}
@@ -376,6 +377,7 @@ export default function SessionRoomPage() {
             speed={speed}
             progress={progress}
             isStreaming={isStreaming}
+            sessionId={id}
             onStart={actions.start}
             onPlay={actions.play}
             onPause={actions.pause}

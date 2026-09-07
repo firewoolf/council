@@ -289,16 +289,23 @@ export function pickProvider(
 
 /**
  * 사용자에게 보여줄 공급사 목록 — 브라우저 직접 호출 가능한 것만.
- * 추천 순서는 무료 한도 큰 것부터 (Groq > OpenRouter > Cerebras > Gemini).
+ * 추천 순서는 각 공급사 freeTier 문자열 기준 실제 무료 한도 큰 것부터:
+ *
+ *   Groq      — 일 14,400회 (분당 30회)
+ *   Cerebras  — 일 100만 토큰
+ *   Gemini    — 일 1,000회 (분당 15회)
+ *   OpenRouter — 일 50회 ← 압도적 최소. roles 에 chunk 가 있어 다른 키가
+ *     없으면 청크 콜이 몰려 하루 몇 세션 만에 소진된다. 마지막 순위로 내려
+ *     "다른 공급사 다 막혔을 때만 쓰는 최후 폴백"으로 취급한다.
  *
  * Cerebras 는 워크오더 §6 CORS 실측 후 막히면 이 배열에서 제외하고
  * PROVIDERS 의 browserDirect 를 false 로 토글한다.
  */
 export const BYOK_PROVIDERS: AiProvider[] = [
   'groq',
-  'openrouter',
   'cerebras',
   'gemini',
+  'openrouter',
 ];
 
 /**

@@ -4,6 +4,7 @@
  * 모든 lib/ai/client.ts 함수는 실패 시 AiCallError 를 throw 한다.
  * 호출자(UI)는 kind + provider 만 보고 분기하면 된다.
  *
+ * - 'overloaded'   : 공급사 일시 과부하. 키·한도와 무관. 다른 공급사로 즉시 전환.
  * - 'invalid_key'  : 키 자체가 무효. 키 다시 발급/입력 안내.
  * - 'quota'        : 키는 OK, 호출 한도 초과. 잠시 후 재시도 or 다른 공급사로.
  * - 'network'      : 인터넷 연결 / CORS 문제.
@@ -12,7 +13,17 @@
 
 import { PROVIDERS, type AiProvider } from './providers';
 
-export type AiErrorKind = 'invalid_key' | 'quota' | 'network' | 'unknown';
+export type AiErrorKind =
+  | 'overloaded'
+  | 'invalid_key'
+  | 'quota'
+  | 'network'
+  | 'unknown';
+
+/** quota/overloaded 만 runWithFallback 의 폴백 대상 — network/unknown 은 진짜 결함을 숨기므로 제외. */
+export function isRetryable(kind: AiErrorKind): boolean {
+  return kind === 'quota' || kind === 'overloaded';
+}
 
 export class AiCallError extends Error {
   readonly kind: AiErrorKind;
@@ -41,15 +52,15 @@ export function classifyAiError(provider: AiProvider, err: unknown): AiCallError
   const raw = err instanceof Error ? err.message : String(err);
   const providerName = PROVIDERS[provider].displayName;
 
-  if (/api[_ ]?key|invalid|unauthor|401|403/i.test(raw)) {
+  if (/high demand|overload|capacity|503|temporarily unavailable|try again later|busy/i.test(raw)) {
     return new AiCallError(
-      'invalid_key',
+      'overloaded',
       provider,
-      `${providerName} API 키가 유효하지 않습니다. 다시 확인해주세요.`,
+      `${providerName} 서버가 혼잡합니다. 다른 공급사로 전환합니다.`,
       raw,
     );
   }
-  if (/quota|rate|limit|429|exceed/i.test(raw)) {
+  if (/quota|rate.?limit|429|exceed|too many requests/i.test(raw)) {
     return new AiCallError(
       'quota',
       provider,
@@ -57,7 +68,15 @@ export function classifyAiError(provider: AiProvider, err: unknown): AiCallError
       raw,
     );
   }
-  if (/network|fetch|cors|timeout/i.test(raw)) {
+  if (/invalid[ _-]?(api[ _-]?key|token|auth)|api[ _-]?key|unauthor|401|403/i.test(raw)) {
+    return new AiCallError(
+      'invalid_key',
+      provider,
+      `${providerName} API 키가 유효하지 않습니다. 다시 확인해주세요.`,
+      raw,
+    );
+  }
+  if (/network|fetch failed|cors|timeout|ECONN/i.test(raw)) {
     return new AiCallError(
       'network',
       provider,
