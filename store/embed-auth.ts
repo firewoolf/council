@@ -19,14 +19,24 @@ import { create } from 'zustand';
  */
 export { SERVER_KEY_SENTINEL } from '@/lib/ai/providers';
 
+/**
+ * 트랙 T-3 — 접속 모드 3종. `null` 은 "아직 서버가 알려주지 않음"(= insight-out
+ * 임베드 postMessage 경로, mode 를 안 실어 보냄) 을 뜻하며 access.ts 가 'paid' 로
+ * 간주한다 — EmbedBridge.tsx 는 무수정이라 여기서 기본값을 못 받는다.
+ */
+export type AccessMode = 'byok' | 'demo' | 'paid';
+
 interface EmbedAuthState {
   /** insight-out 이 발급한 로그인 티켓 (HMAC 서명) */
   ticket: string | null;
   /** 서버에 키가 등록돼 쓸 수 있는 공급사 목록 (/api/ai/config 결과) */
   serverProviders: string[];
+  /** /api/ai/config 가 실어 보낸 티켓 모드. EmbedBridge 경로는 세팅 안 함(=paid 취급). */
+  mode: AccessMode | null;
 
   setTicket: (ticket: string | null) => void;
   setServerProviders: (providers: string[]) => void;
+  setMode: (mode: AccessMode | null) => void;
   /** 서버 모드 활성 여부 */
   isServerMode: () => boolean;
 }
@@ -34,9 +44,11 @@ interface EmbedAuthState {
 export const useEmbedAuthStore = create<EmbedAuthState>((set, get) => ({
   ticket: null,
   serverProviders: [],
+  mode: null,
 
   setTicket: (ticket) => set({ ticket }),
   setServerProviders: (serverProviders) => set({ serverProviders }),
+  setMode: (mode) => set({ mode }),
 
   isServerMode: () => !!get().ticket && get().serverProviders.length > 0,
 }));

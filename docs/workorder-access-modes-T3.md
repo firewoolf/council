@@ -44,10 +44,16 @@ insight-out 임베드 → postMessage(ticket) → EmbedBridge.setTicket()
 
 ## §B 티켓 URL 진입 — 서명 링크
 
-현행 `EmbedBridge` postMessage 경로는 그대로 두고, **URL 쿼리 진입을 추가**한다.
+현행 `EmbedBridge` postMessage 경로는 그대로 두고, **URL fragment 진입을 추가**한다.
 
-- `?t=<ticket>` 이 있으면 `setTicket` 하고 `/api/ai/config` 를 같은 방식으로 조회한다.
-- 읽은 뒤 **URL 에서 `t` 파라미터를 제거**한다 (`router.replace`). 히스토리·어깨너머 노출 방지.
+- `#t=<ticket>` 이 있으면 `setTicket` 하고 `/api/ai/config` 를 같은 방식으로 조회한다.
+  **쿼리(`?t=`)가 아니라 fragment 다** — fragment 는 서버로 전송되지 않는다.
+  쿼리였다면 `router.replace` 로 히스토리는 정리해도 첫 요청이 이미 서버(Vercel
+  액세스 로그)에 티켓을 평문으로 남긴 뒤다. 티켓은 서버키 사용 권한이고 TTL 최대
+  2주라, 로그에 장기 보관되는 걸 피한다.
+- 읽은 뒤 **URL 에서 `t` 를 제거**한다 (`history.replaceState`). `router.replace` 는
+  hash 를 못 지울 수 있고, 리렌더 없이 주소만 정리하면 충분하다. 히스토리·어깨너머
+  노출 방지.
 - 티켓은 **sessionStorage** 에 보관한다. 새로고침은 견디고 탭을 닫으면 사라진다.
   localStorage 는 쓰지 마라 — 티켓은 짧은 수명이다.
 - 새 클라이언트 컴포넌트로 분리하고 루트 레이아웃에 얹는다. `EmbedBridge` 를 고치지 마라.

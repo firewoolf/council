@@ -8,7 +8,13 @@
  *   3) 여기서 HMAC·aud·exp 만 검증. Supabase 결합/토큰 과다공유 없음, 위조 불가.
  *
  * 티켓 포맷(경량 JWT류): `base64url(payloadJSON).base64url(HMAC_SHA256(body, SECRET))`
- *   payload = { sub: userId, aud: 'council', iat, exp }  (exp/iat 는 초 단위)
+ *   payload = { sub: userId, aud: 'council', iat, exp, mode? }  (exp/iat 는 초 단위)
+ *
+ * mode — 트랙 T-3, 접속 모드 3종(byok/demo/paid) 중 서버 프록시로 도는 두 모드를 구분:
+ *   - 'demo' : 서명 링크로 발급한 데모 티켓 (무료 서버키, 라운드로빈 청크 라우팅)
+ *   - 'paid' : insight-out 임베드가 발급하는 기존 티켓 (유료 서버키, Gemini 고정 청크)
+ *   - 미지정 : insight-out 이 이미 발급 중인 구 티켓과의 하위 호환 — verifyTicket 이
+ *     'paid' 로 간주한다. 이 기본값을 바꾸지 말 것.
  *
  * insight-out 발급 측도 이 알고리즘을 그대로 쓴다(mintTicket 참고).
  */
@@ -18,11 +24,14 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 const SECRET = process.env.COUNCIL_GATE_SECRET ?? '';
 const AUDIENCE = 'council';
 
+export type TicketMode = 'demo' | 'paid';
+
 export interface TicketPayload {
   sub: string;
   aud: string;
   iat: number;
   exp: number;
+  mode?: TicketMode;
 }
 
 export function gateEnabled(): boolean {
@@ -30,13 +39,18 @@ export function gateEnabled(): boolean {
 }
 
 /** 발급 — insight-out 측에서 동일 로직으로 사용(참고/공유용). */
-export function mintTicket(userId: string, ttlSeconds = 600): string {
+export function mintTicket(
+  userId: string,
+  mode?: TicketMode,
+  ttlSeconds = 600,
+): string {
   const now = Math.floor(Date.now() / 1000);
   const payload: TicketPayload = {
     sub: userId,
     aud: AUDIENCE,
     iat: now,
     exp: now + ttlSeconds,
+    ...(mode ? { mode } : {}),
   };
   const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
   const sig = createHmac('sha256', SECRET).update(body).digest('base64url');
@@ -69,6 +83,10 @@ export function verifyTicket(ticket: string | null | undefined): TicketPayload |
     if (payload.aud !== AUDIENCE) return null;
     if (typeof payload.exp !== 'number' || payload.exp * 1000 < Date.now()) {
       return null;
+    }
+    // mode 없는 구 티켓(insight-out 기존 발급분) = paid 하위 호환. 바꾸지 말 것.
+    if (payload.mode !== 'demo' && payload.mode !== 'paid') {
+      payload.mode = 'paid';
     }
     return payload;
   } catch {
