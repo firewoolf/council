@@ -9,9 +9,15 @@
  * 서버 모드가 아니면 기존 BYOK 키 맵을 그대로 반환.
  */
 
-import { SERVER_KEY_SENTINEL, useEmbedAuthStore } from '@/store/embed-auth';
+import {
+  SERVER_KEY_SENTINEL,
+  useEmbedAuthStore,
+  type AccessMode,
+} from '@/store/embed-auth';
 import { useApiKeyStore } from '@/store/api-key';
 import { SERVER_PROVIDERS, type AiProvider } from './providers';
+
+export type { AccessMode };
 
 /**
  * 현재 사용할 키 맵.
@@ -41,4 +47,16 @@ export function isServerMode(): boolean {
   return embed.serverProviders.some((p) =>
     (SERVER_PROVIDERS as readonly string[]).includes(p),
   );
+}
+
+/**
+ * 현재 접속 모드. 티켓 payload 의 mode 는 서버(/api/ai/config)가 검증해 내려준
+ * 값만 신뢰한다 — 클라이언트에서 티켓을 직접 디코드하지 않는다.
+ *
+ * - 티켓이 없거나(서버 공급사도 없거나) → 'byok'.
+ * - 있으면 서버가 알려준 mode. 못 받았으면(EmbedBridge 의 구 postMessage 경로) 'paid'.
+ */
+export function currentMode(): AccessMode {
+  if (!isServerMode()) return 'byok';
+  return useEmbedAuthStore.getState().mode ?? 'paid';
 }

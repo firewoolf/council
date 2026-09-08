@@ -564,6 +564,8 @@ export function useDebate(sessionId: string): UseDebateReturn {
           liveKeys,
           makeCall,
           {
+            // T-3 §D-1 — demo 모드 라운드로빈이 세션 내내 같은 공급사를 고르도록.
+            sessionId,
             onFallback: () => {
               // 이전 시도에서 흘러나간 턴 폐기 후 처음부터 재연출(원칙 4).
               // 공급사 전환은 사용자에게 알리지 않는다 — 불안만 조성하므로 조용히 처리.

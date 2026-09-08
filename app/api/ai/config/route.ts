@@ -13,11 +13,15 @@ import { configuredServerProviders } from '@/lib/ai/serverKeys';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest): Promise<Response> {
-  if (!verifyTicket(req.headers.get('x-council-ticket'))) {
+  const payload = verifyTicket(req.headers.get('x-council-ticket'));
+  if (!payload) {
     return new Response(JSON.stringify({ error: '로그인 인증이 필요합니다.' }), {
       status: 401,
       headers: { 'content-type': 'application/json' },
     });
   }
-  return Response.json({ providers: configuredServerProviders() });
+  return Response.json({
+    providers: configuredServerProviders(),
+    mode: payload.mode,
+  });
 }

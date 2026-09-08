@@ -18,7 +18,9 @@
  */
 
 import { AiCallError, isRetryable } from './errors';
+import { currentMode } from './access';
 import {
+  PROVIDERS,
   listAvailableProviders,
   pickProvider,
   type AiProvider,
@@ -34,6 +36,56 @@ export interface RunWithFallbackOptions {
    * UI 알림에 활용. 예외를 던지지 말 것 — 호출 흐름과 분리된 사이드이펙트만.
    */
   onFallback?: (from: AiProvider, to: AiProvider) => void;
+  /**
+   * 트랙 T-3 §D-1 — demo 모드 청크 라운드로빈 결정에 쓰는 세션 식별자.
+   * role === 'chunk' 이고 mode === 'demo' 일 때만 쓰인다. 상태 저장 없이
+   * hash(sessionId) % 후보수 로 세션 내내 같은 공급사를 고정한다.
+   */
+  sessionId?: string;
+}
+
+/** djb2 — 세션 라운드로빈용 결정적 해시. 암호화 용도 아님. */
+function hashString(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 33) ^ s.charCodeAt(i);
+  }
+  return h >>> 0;
+}
+
+/**
+ * 트랙 T-3 §D — 'chunk' role 한정, 모드별로 pickProvider 에 넘길 후보 순서를 조정한다.
+ * pickProvider 시그니처는 건드리지 않는다 — 첫 매치를 고르므로, 원하는 공급사를
+ * 배열 앞으로 옮기는 것만으로 우선순위를 바꿀 수 있다. 나머지 후보는 그대로 남아
+ * isRetryable 폴백 경로가 살아있다.
+ */
+function orderChunkCandidates(
+  role: AiTaskRole,
+  available: readonly AiProvider[],
+  sessionId: string | undefined,
+): readonly AiProvider[] {
+  if (role !== 'chunk') return available;
+
+  const mode = currentMode();
+
+  if (mode === 'paid') {
+    if (!available.includes('gemini')) return available;
+    return ['gemini', ...available.filter((p) => p !== 'gemini')];
+  }
+
+  if (mode === 'demo' && sessionId) {
+    // chunk 를 처리할 수 있는 후보만 순환 대상 — roles 명시 없으면 범용(예: openrouter).
+    const candidates = available.filter((p) => {
+      const roles = PROVIDERS[p].roles;
+      return !roles || roles.includes('chunk');
+    });
+    if (candidates.length === 0) return available;
+    const chosen = candidates[hashString(sessionId) % candidates.length]!;
+    return [chosen, ...available.filter((p) => p !== chosen)];
+  }
+
+  // byok — 현행 그대로.
+  return available;
 }
 
 /**
@@ -58,8 +110,11 @@ export async function runWithFallback<T>(
   if (available.length === 0) {
     throw new Error('사용 가능한 API 키가 없습니다. /settings 에서 등록하세요.');
   }
+  // T-3 §D — chunk role 은 접속 모드(paid=Gemini 고정 / demo=세션 해시 라운드로빈)에
+  // 맞게 후보 순서만 조정한다. byok 는 원본 순서 그대로.
+  const ordered = orderChunkCandidates(role, available, opts.sessionId);
 
-  let provider = pickProvider(role, available);
+  let provider = pickProvider(role, ordered);
   while (provider && !tried.has(provider)) {
     tried.add(provider);
     const apiKey = keys[provider];
@@ -81,7 +136,7 @@ export async function runWithFallback<T>(
         throw err;
       }
       // 시도 안 한 다음 후보 선택
-      const remaining = available.filter((p) => !tried.has(p));
+      const remaining = ordered.filter((p) => !tried.has(p));
       const nextProvider = pickProvider(role, remaining);
       if (nextProvider && provider) {
         try {

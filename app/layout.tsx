@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { JetBrains_Mono, Syne } from 'next/font/google';
 import { Toaster } from 'sonner';
 
+import { AccessTicketBridge } from '@/components/access/AccessTicketBridge';
 import './globals.css';
 
 /**
@@ -50,6 +51,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-background text-text antialiased">
+        <AccessTicketBridge />
         {children}
         <Toaster
           position="top-center"

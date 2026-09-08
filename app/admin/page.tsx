@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Activity, ArrowRight, FileText, History, Users } from 'lucide-react';
+import { Activity, ArrowRight, FileText, History, Link2, Users } from 'lucide-react';
 
 import { isAdminEnabled, isAuthenticated } from '@/lib/admin/auth';
 import { isEditEnabled } from '@/lib/admin/github';
@@ -53,6 +53,13 @@ export default function AdminDashboardPage() {
           title="토큰 사용량"
           meta="추정 대 실측 / 세션별 원가"
           description="AI 호출의 입력·출력·캐시 토큰과 근사 원가를 확인합니다."
+        />
+        <AdminCard
+          href="/admin/demo-links"
+          icon={<Link2 className="size-5 text-primary" />}
+          title="데모 링크 발급"
+          meta="서명 링크(?t=) / 계정 없이 접속"
+          description="TTL 이 있는 데모 티켓을 발급합니다. 계정 없이 무료 서버키로 토론이 돕니다."
         />
         {isEditEnabled() && (
           <AdminCard
