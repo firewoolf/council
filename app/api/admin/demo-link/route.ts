@@ -51,7 +51,9 @@ export async function POST(request: Request): Promise<Response> {
       : DEFAULT_TTL_HOURS;
 
   const ticket = mintTicket(label, 'demo', Math.round(ttlHours * 3600));
-  const url = `${new URL(request.url).origin}/?t=${ticket}`;
+  // fragment(#) — 쿼리(?)와 달리 서버로 전송되지 않는다. 티켓이 Vercel 액세스
+  // 로그에 평문으로 남는 걸 피한다 (TTL 최대 2주짜리 서버키 사용 권한이라 더 신중).
+  const url = `${new URL(request.url).origin}/#t=${ticket}`;
 
   return NextResponse.json({ url, ttlHours });
 }
