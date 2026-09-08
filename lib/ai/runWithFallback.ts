@@ -5,7 +5,7 @@
  * 다른 사용 가능 공급사로 1회 재시도. 무한 루프 방지를 위해 provider 당 1회.
  *
  * 폴백 조건:
- *   - AiCallError && kind === 'quota' 만 폴백 대상.
+ *   - AiCallError && isRetryable(kind) (quota 또는 overloaded) 만 폴백 대상.
  *   - 그 외 에러(invalid_key/network/unknown) 는 즉시 throw — 폴백 의미 없음.
  *
  * 모든 후보 소진 시 마지막 에러를 그대로 throw — 호출자가 showAiError 등으로
@@ -17,7 +17,7 @@
  *   );
  */
 
-import { AiCallError } from './errors';
+import { AiCallError, isRetryable } from './errors';
 import {
   listAvailableProviders,
   pickProvider,
@@ -76,8 +76,8 @@ export async function runWithFallback<T>(
       return { result, usedProvider: provider };
     } catch (err) {
       lastErr = err;
-      // quota 외 에러는 즉시 throw — 다른 공급사로 갈아탈 이유 없음
-      if (!(err instanceof AiCallError) || err.kind !== 'quota') {
+      // quota/overloaded 외 에러는 즉시 throw — 다른 공급사로 갈아탈 이유 없음
+      if (!(err instanceof AiCallError) || !isRetryable(err.kind)) {
         throw err;
       }
       // 시도 안 한 다음 후보 선택

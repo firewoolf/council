@@ -24,6 +24,7 @@ interface DirectorConsoleProps {
   speed: PlaybackSpeed;
   progress: { revealed: number; total: number };
   isStreaming: boolean;
+  sessionId: string;
   onChooseTopic: (label: string, hook?: string) => void;
   onCustomTopic: (text: string) => void;
   onConclude: () => void;
@@ -57,6 +58,7 @@ export function DirectorConsole({
   speed,
   progress,
   isStreaming,
+  sessionId,
   onChooseTopic,
   onCustomTopic,
   onConclude,
@@ -142,6 +144,7 @@ export function DirectorConsole({
           speed={speed}
           progress={progress}
           isStreaming={isStreaming}
+          sessionId={sessionId}
           onStart={onStart}
           onPlay={onPlay}
           onPause={onPause}

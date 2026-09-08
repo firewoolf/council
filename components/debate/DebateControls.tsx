@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { ChevronRight, Flag, Loader2, Pause, Play } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,8 @@ interface DebateControlsProps {
   /** 현재 청크 안에서 드러난 턴 수 / 전체 턴 수 — 진행 표시용 */
   progress: { revealed: number; total: number };
   isStreaming?: boolean;
+  /** 결론 완료(concluded) 시 결론 페이지 CTA 링크 대상 */
+  sessionId: string;
   onStart: () => void;
   onPlay: () => void;
   onPause: () => void;
@@ -41,6 +44,7 @@ export function DebateControls({
   isPaused,
   speed,
   progress,
+  sessionId,
   onStart,
   onPlay,
   onPause,
@@ -55,10 +59,13 @@ export function DebateControls({
   if (phase === 'concluded') {
     return (
       <Bar {...barProps}>
-        <div className="flex flex-1 items-center justify-center gap-2 text-sm text-text-muted">
-          <Flag className="size-4 text-primary" />
-          결론이 정리되었습니다.
-        </div>
+        <Link
+          href={`/session/${sessionId}/summary`}
+          className="flex flex-1 items-center justify-center gap-2 text-sm font-medium text-primary transition-colors hover:text-primary/80"
+        >
+          <Flag className="size-4" />
+          결론 보기 →
+        </Link>
       </Bar>
     );
   }
