@@ -52,7 +52,7 @@ export function classifyAiError(provider: AiProvider, err: unknown): AiCallError
   const raw = err instanceof Error ? err.message : String(err);
   const providerName = PROVIDERS[provider].displayName;
 
-  if (/high demand|overload|capacity|503|temporarily unavailable|try again later|busy/i.test(raw)) {
+  if (/high demand|overload|capacity|\b503\b|temporarily unavailable|try again later|\bbusy\b/i.test(raw)) {
     return new AiCallError(
       'overloaded',
       provider,
@@ -60,7 +60,7 @@ export function classifyAiError(provider: AiProvider, err: unknown): AiCallError
       raw,
     );
   }
-  if (/quota|rate.?limit|429|exceed|too many requests/i.test(raw)) {
+  if (/quota|rate.?limit|\blimit\b|exhaust|\b429\b|exceed|too many requests/i.test(raw)) {
     return new AiCallError(
       'quota',
       provider,
@@ -68,7 +68,7 @@ export function classifyAiError(provider: AiProvider, err: unknown): AiCallError
       raw,
     );
   }
-  if (/invalid[ _-]?(api[ _-]?key|token|auth)|api[ _-]?key|unauthor|401|403/i.test(raw)) {
+  if (/invalid[ _-]?(api[ _-]?key|token|auth)|api[ _-]?key|unauthor|\b401\b|\b403\b/i.test(raw)) {
     return new AiCallError(
       'invalid_key',
       provider,
