@@ -15,7 +15,7 @@ export default function AdminDemoLinksPage() {
       <div>
         <h1 className="text-2xl font-bold text-text">데모 링크 발급</h1>
         <p className="mt-1 text-sm text-text-muted">
-          서명 링크(<code className="font-mono text-xs">?t=&lt;ticket&gt;</code>)로
+          서명 링크(<code className="font-mono text-xs">#t=&lt;ticket&gt;</code>)로
           접속하면 계정·키 입력 없이 서버 등록 키로 토론이 돕니다. TTL 이 지나면
           링크는 자동 만료됩니다.
         </p>
