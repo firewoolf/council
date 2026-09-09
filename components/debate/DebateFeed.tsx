@@ -22,6 +22,8 @@ interface DebateFeedProps {
   chunks: readonly ChunkMeta[];
   /** 회의 시작 전 안내 — 발언이 아직 없을 때 표시 */
   emptyHint?: string;
+  /** 회의 시작 전 안내 아래에 표시할 행동. 웹 피드에서만 사용한다. */
+  emptyAction?: React.ReactNode;
   /**
    * 트랙 ③ — 카드별 디렉션 전송.
    * 제공 시 페르소나 카드 우상단 ⋯ 버튼이 활성화된다.
@@ -63,6 +65,7 @@ export function DebateFeed({
   cast,
   chunks,
   emptyHint,
+  emptyAction,
   onDirect,
   phase = 'idle',
   activeSpeakerId = null,
@@ -214,8 +217,15 @@ export function DebateFeed({
 
   if (messages.length === 0 && emptyHint) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-surface/40 p-8 text-center">
-        <p className="text-sm leading-relaxed text-text-muted">{emptyHint}</p>
+      <div
+        className={cn(emptyAction && 'flex min-h-full items-center justify-center')}
+      >
+        <div className="rounded-xl border border-dashed border-border bg-surface/40 p-8 text-center">
+          <p className="text-sm leading-relaxed text-text-muted">{emptyHint}</p>
+          {emptyAction && (
+            <div className="mt-4 flex justify-center">{emptyAction}</div>
+          )}
+        </div>
       </div>
     );
   }

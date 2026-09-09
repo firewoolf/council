@@ -8,6 +8,8 @@ import { useHasMounted } from '@/hooks/useHasMounted';
 import { isEmbedded } from '@/lib/embed/protocol';
 import { cn } from '@/lib/utils';
 
+const SESSION_ROOM_PATH = /^\/session\/(?!new\/?$)[^/]+\/?$/;
+
 /**
  * 메인 그룹 크롬(헤더·푸터).
  *
@@ -28,6 +30,7 @@ export function MainChrome({
   const embedded = mounted && isEmbedded();
   const pathname = usePathname();
   const router = useRouter();
+  const isSessionRoom = SESSION_ROOM_PATH.test(pathname);
   // 임베드에선 council 헤더(로고→홈)를 숨기므로 뒤로가기 경로가 없다.
   // 세션 화면(/session/*)은 자체 "홈으로"가 있으니 제외하고, 그 외(설정·기록 등)에만 노출.
   const showBack = embedded && !pathname.startsWith('/session');
@@ -37,6 +40,7 @@ export function MainChrome({
       className={cn(
         'mx-auto flex min-h-screen max-w-2xl flex-col px-4 sm:px-6',
         embedded && 'pt-2',
+        isSessionRoom && 'lg:h-screen lg:max-w-[1600px]',
       )}
     >
       {showBack && (
@@ -68,7 +72,15 @@ export function MainChrome({
         </header>
       )}
 
-      <main className={cn('flex-1', embedded ? 'pb-8' : 'pb-16')}>{children}</main>
+      <main
+        className={cn(
+          'flex-1',
+          embedded ? 'pb-8' : 'pb-16',
+          isSessionRoom && 'lg:flex lg:min-h-0 lg:flex-col lg:pb-0',
+        )}
+      >
+        {children}
+      </main>
 
       {!embedded && (
         <footer className="flex items-center justify-between gap-3 border-t border-border/60 py-4 text-[11px] text-text-dim">

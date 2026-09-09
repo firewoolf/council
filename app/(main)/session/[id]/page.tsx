@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Flag,
   Pin,
+  Play,
   Trash2,
   Volume2,
   VolumeX,
@@ -137,9 +138,9 @@ export default function SessionRoomPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-52 pt-2 lg:pb-0">
+    <div className="flex flex-col gap-4 pb-52 pt-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:pb-0">
       {/* 상단 행 — 홈 링크 + mute 토글 */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between lg:shrink-0">
         <Link
           href="/"
           className="inline-flex w-fit items-center gap-1 text-xs text-text-muted hover:text-text"
@@ -167,10 +168,10 @@ export default function SessionRoomPage() {
       </div>
 
       {/* 접이식 사용량 인디케이터 — 기록 있을 때만 표시 */}
-      <UsageIndicator />
+      <UsageIndicator className="lg:shrink-0" />
 
       {/* 헤더 — 접힘 */}
-      <header className="overflow-hidden rounded-xl border border-border bg-surface">
+      <header className="overflow-hidden rounded-xl border border-border bg-surface lg:shrink-0">
         <button
           type="button"
           onClick={() => setHeaderOpen((v) => !v)}
@@ -249,7 +250,7 @@ export default function SessionRoomPage() {
       {conclusion && (
         <Link
           href={`/session/${id}/summary`}
-          className="flex items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 p-4 transition-colors hover:bg-primary/15"
+          className="flex items-center justify-between gap-3 rounded-xl border border-primary/40 bg-primary/10 p-4 transition-colors hover:bg-primary/15 lg:shrink-0"
         >
           <div className="flex items-start gap-3">
             <Flag className="mt-0.5 size-5 shrink-0 text-primary" />
@@ -268,7 +269,7 @@ export default function SessionRoomPage() {
 
       {/* 에러 배너 */}
       {error && phase === 'error' && (
-        <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+        <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4 lg:shrink-0">
           <AlertCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-text">토론이 중단되었습니다</p>
@@ -277,14 +278,12 @@ export default function SessionRoomPage() {
         </div>
       )}
 
-      {/* 웹 패널 (lg+) — full-bleed 2단 그리드.
+      {/* 웹 패널 (lg+) — 상단 블록과 정렬선을 공유하는 2단 그리드.
           라이브 피드(자체 스크롤) + 디렉터 콘솔(조향)을 한 시야에 둔다. */}
       <div
         className={cn(
-          'hidden lg:grid lg:gap-4',
+          'hidden lg:grid lg:min-h-0 lg:flex-1 lg:gap-4',
           'lg:grid-cols-[1fr_360px]',
-          'lg:ml-[calc(50%-50vw)] lg:w-screen lg:px-4',
-          'lg:sticky lg:top-2 lg:h-[calc(100dvh-1rem)]',
         )}
       >
         {/* 라이브 피드 (좌측) — 자체 스크롤 컨테이너 */}
@@ -311,6 +310,14 @@ export default function SessionRoomPage() {
                 phase === 'idle'
                   ? '토론 시작을 누르면 이곳에 대화가 이어집니다.'
                   : undefined
+              }
+              emptyAction={
+                phase === 'idle' ? (
+                  <Button size="default" onClick={actions.start}>
+                    <Play className="size-4" />
+                    토론 시작
+                  </Button>
+                ) : undefined
               }
             />
           </div>
