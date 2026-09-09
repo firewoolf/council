@@ -138,7 +138,7 @@ export default function SessionRoomPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-52 pt-2 lg:relative lg:left-1/2 lg:mx-auto lg:h-[100dvh] lg:w-[calc(100vw-3rem)] lg:max-w-[1600px] lg:-translate-x-1/2 lg:overflow-hidden lg:pb-0">
+    <div className="flex flex-col gap-4 pb-52 pt-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:pb-0">
       {/* 상단 행 — 홈 링크 + mute 토글 */}
       <div className="flex items-center justify-between lg:shrink-0">
         <Link
