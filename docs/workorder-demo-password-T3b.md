@@ -38,17 +38,23 @@ T-3 의 서명 링크는 **링크 자체가 열쇠**라 회수가 불가능하�
 - 성공 시 `mintTicket('demo', 'demo', TTL)` 로 발급해 `{ ticket }` 반환.
   - `sub` 은 `'demo'` 고정. 비밀번호 방식엔 개인 식별이 없고, 사용량은 어차피
     브라우저 로컬 집계라 라벨을 받아도 구분되지 않는다.
-  - TTL 은 **7일 고정**. 만료돼도 비밀번호만 다시 치면 되므로 길게 잡을 이유가 없다.
+  - TTL 은 **1년 고정**(`60*60*24*365`). 데모 환경은 본인 전용(시연·내부 사용)이라
+    공유하지 않는다 — 다른 사용자는 BYOK 또는 유료로 들어온다. 그래서 정기 갱신도
+    회수 장치도 두지 않는다.
 - 미들웨어 matcher 는 `/admin/:path*` · `/api/admin/:path*` 뿐이라 이 경로는
   자동으로 공개다. **matcher 를 건드리지 마라.**
 
 ## §D `app/demo/page.tsx` + 입력 폼 — 신설
 
 - 비밀번호 입력 한 칸 + 제출. `app/admin/login` 의 `LoginForm` 구조를 참고한다.
-- 성공 시 응답의 ticket 을 **sessionStorage 키 `council:access-ticket`** 에 저장하고
+- 성공 시 응답의 ticket 을 **localStorage 키 `council:access-ticket`** 에 저장하고
   `/` 로 이동한다. 그러면 기존 `AccessTicketBridge` 가 복원 경로로 집어 든다 —
-  **브리지를 고치지 마라.** 키 이름을 반드시 그대로 맞출 것.
-- 실패 시 에러 문구만 표시. 비밀번호를 URL·localStorage 어디에도 남기지 마라.
+  키 이름을 반드시 그대로 맞출 것. 저장은 `AccessTicketBridge` 가 내보내는
+  헬퍼(`writeStoredTicket`)로만 한다 — `#t=` URL 진입 경로와 로그인 폼 경로가
+  서로 다른 저장소를 보면 조용히 어긋난다.
+  (데모 환경은 본인 전용이라 tab 종료로 사라지는 sessionStorage 대신
+  localStorage 로 굳는다 — TTL 1년짜리 티켓과 짝이 맞다.)
+- 실패 시 에러 문구만 표시. 비밀번호를 URL 어디에도 남기지 마라.
 - `DEMO_PASSWORD` 미설정이면 안내 문구만 띄운다.
 
 ## §E 기존 `/admin/demo-links` — 그대로 둔다

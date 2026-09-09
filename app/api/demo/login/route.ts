@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { checkDemoPassword, isDemoEnabled } from '@/lib/demo/auth';
 import { gateEnabled, mintTicket } from '@/lib/ai/gate';
 
-const TICKET_TTL_SECONDS = 60 * 60 * 24 * 7; // 7일 고정 — 만료돼도 비밀번호만 다시 치면 된다.
+const TICKET_TTL_SECONDS = 60 * 60 * 24 * 365; // 1년 고정 — 본인 전용이라 갱신을 두지 않는다.
 
 export async function POST(request: Request) {
   if (!isDemoEnabled()) {
