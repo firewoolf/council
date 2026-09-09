@@ -4,11 +4,10 @@ import { useState } from 'react';
 import { KeyRound, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { writeStoredTicket } from '@/components/access/AccessTicketBridge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-const TICKET_STORAGE_KEY = 'council:access-ticket';
 
 export function DemoLoginForm() {
   const [password, setPassword] = useState('');
@@ -29,16 +28,13 @@ export function DemoLoginForm() {
         throw new Error(data.error ?? '비밀번호가 일치하지 않습니다.');
       }
 
-      // sessionStorage 에만 보관 — 비밀번호는 여기 어디에도 남기지 않는다.
-      try {
-        sessionStorage.setItem(TICKET_STORAGE_KEY, data.ticket);
-      } catch {
-        /* noop — sessionStorage 접근 불가 환경 */
-      }
+      // AccessTicketBridge 의 저장소 헬퍼로만 접근 — #t= URL 진입 경로와 같은
+      // 저장소(localStorage)를 보게 한다. 비밀번호는 여기 어디에도 남기지 않는다.
+      writeStoredTicket(data.ticket);
 
       // 전체 새로고침으로 이동 — 루트 레이아웃의 AccessTicketBridge 가 마운트되며
-      // sessionStorage 의 티켓을 복원 경로로 집어 든다(클라이언트 라우팅으로는
-      // 이미 마운트된 레이아웃의 이펙트가 다시 안 돈다).
+      // 저장된 티켓을 복원 경로로 집어 든다(클라이언트 라우팅으로는 이미 마운트된
+      // 레이아웃의 이펙트가 다시 안 돈다).
       window.location.href = '/';
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '비밀번호가 일치하지 않습니다.');
