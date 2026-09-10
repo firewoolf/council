@@ -19,7 +19,8 @@ export type AiProvider =
   | 'sambanova'
   | 'nvidia'
   | 'together'
-  | 'github';
+  | 'github'
+  | 'cohere';
 
 /**
  * LLM 호출 작업 종류 — provider 라우팅에 사용.
@@ -174,7 +175,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: false,
     supportsStream: false,
     accent: { from: '#FF7000', to: '#FFB27A' },
-    freeTier: '무료 체험 한도 (La Plateforme).',
+    freeTier: '초당 1회 / 월 10억 토큰 무료 (La Plateforme) · 2026-09-10 확인',
+    roles: ['debate', 'chunk'],
   },
   sambanova: {
     id: 'sambanova',
@@ -198,7 +200,8 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: false,
     supportsStream: false,
     accent: { from: '#76B900', to: '#B6F04A' },
-    freeTier: '무료 크레딧 (build.nvidia.com).',
+    freeTier: '분당 40회 (크레딧 자동 충전, build.nvidia.com) · 2026-09-10 확인',
+    roles: ['debate', 'chunk'],
   },
   together: {
     id: 'together',
@@ -222,7 +225,22 @@ export const PROVIDERS: Record<AiProvider, ProviderConfig> = {
     browserDirect: false,
     supportsStream: false,
     accent: { from: '#64748B', to: '#CBD5E1' },
-    freeTier: '무료 (GitHub Models, PAT 필요).',
+    freeTier: '분당 10~15회 / 일 50~150회 (GitHub Models, PAT 필요) · 2026-09-10 확인',
+    roles: ['debate', 'chunk'],
+  },
+  cohere: {
+    id: 'cohere',
+    displayName: 'Cohere',
+    signupUrl: 'https://dashboard.cohere.com/api-keys',
+    signupGuide: '서버 등록 키 사용(COHERE_API_KEYS).',
+    // Command A는 공식 문서 기준 한국어를 포함한 23개 언어를 지원한다.
+    modelId: 'command-a-03-2025',
+    keyPattern: /.+/,
+    browserDirect: false,
+    supportsStream: false,
+    accent: { from: '#39594D', to: '#D8E8A8' },
+    freeTier: '분당 20회 / 월 1,000회 (Cohere 트라이얼 키)',
+    roles: ['debate', 'chunk'],
   },
 };
 
@@ -247,7 +265,7 @@ export function listAvailableProviders(
   keys: Partial<Record<AiProvider, string>>,
 ): AiProvider[] {
   // 서버 모드(센티넬 키)면 후보를 BYOK 4종으로 좁히지 않는다 — 서버에 키가 등록된
-  // 공급사 전체(SERVER_PROVIDERS 9종)가 폴백 풀이 된다. 그러지 않으면 Mistral 등
+  // 공급사 전체(SERVER_PROVIDERS 10종)가 폴백 풀이 된다. 그러지 않으면 Mistral 등
   // 서버 전용 공급사는 env 에 키를 넣어도 영영 라우팅되지 않는다.
   const serverMode = Object.values(keys).some((v) => v === SERVER_KEY_SENTINEL);
   const pool = serverMode ? SERVER_PROVIDERS : BYOK_PROVIDERS;
@@ -322,4 +340,5 @@ export const SERVER_PROVIDERS: AiProvider[] = [
   'nvidia',
   'together',
   'github',
+  'cohere',
 ];

@@ -32,6 +32,7 @@ export const UPSTREAM: Record<string, Upstream> = {
   nvidia:     { baseURL: 'https://integrate.api.nvidia.com/v1',          auth: 'bearer', envPrefix: 'NVIDIA' },
   together:   { baseURL: 'https://api.together.xyz/v1',                   auth: 'bearer', envPrefix: 'TOGETHER' },
   github:     { baseURL: 'https://models.inference.ai.azure.com',        auth: 'bearer', envPrefix: 'GITHUB_MODELS' },
+  cohere:     { baseURL: 'https://api.cohere.ai/compatibility/v1',       auth: 'bearer', envPrefix: 'COHERE' },
 };
 
 export function isKnownUpstream(provider: string): provider is keyof typeof UPSTREAM {

@@ -144,6 +144,7 @@ function getModel(provider: AiProvider, apiKey: string) {
     case 'nvidia':
     case 'together':
     case 'github':
+    case 'cohere':
       if (!proxy) {
         throw new AiCallError(
           'unknown',
