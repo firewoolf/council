@@ -22,6 +22,7 @@ import { ChatInputBar } from '@/components/debate/ChatInputBar';
 import { DebateControls } from '@/components/debate/DebateControls';
 import { DebateFeed } from '@/components/debate/DebateFeed';
 import { DirectorConsole } from '@/components/debate/DirectorConsole';
+import { NextDirections } from '@/components/debate/NextDirections';
 import { PersonaDetailDrawer } from '@/components/debate/PersonaDetailDrawer';
 import { PinBoard } from '@/components/debate/PinBoard';
 import { SteeringSheet } from '@/components/debate/SteeringSheet';
@@ -77,6 +78,9 @@ export default function SessionRoomPage() {
     actions,
   } = useDebate(id);
   const [headerOpen, setHeaderOpen] = useState(false);
+  const [mobileBottomBarHeight, setMobileBottomBarHeight] = useState<number | null>(
+    null,
+  );
   // ⑤-5f-B — mute 토글 상태 (localStorage 에서 초기화, setMuted 와 동기화)
   const [soundMuted, setSoundMuted] = useState(() => isMuted());
   const sheet = useSessionUiStore((s) => s.sheet);
@@ -104,6 +108,7 @@ export default function SessionRoomPage() {
 
   /** 웹 패널 모드 — 중앙 피드 자체 스크롤 컨테이너. */
   const feedScrollRef = useRef<HTMLDivElement>(null);
+  const mobileBottomBarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (mounted && !session) {
@@ -115,6 +120,28 @@ export default function SessionRoomPage() {
   useEffect(() => {
     if (error) toast.error(`토론 진행 중 오류: ${error}`);
   }, [error]);
+
+  useEffect(() => {
+    const bottomBar = mobileBottomBarRef.current;
+    if (!bottomBar || typeof ResizeObserver === 'undefined') return;
+
+    const mobileQuery = window.matchMedia('(max-width: 1023px)');
+    const updateBottomPadding = () => {
+      setMobileBottomBarHeight(
+        mobileQuery.matches ? bottomBar.getBoundingClientRect().height : null,
+      );
+    };
+    const observer = new ResizeObserver(updateBottomPadding);
+
+    observer.observe(bottomBar);
+    mobileQuery.addEventListener('change', updateBottomPadding);
+    updateBottomPadding();
+
+    return () => {
+      observer.disconnect();
+      mobileQuery.removeEventListener('change', updateBottomPadding);
+    };
+  }, []);
 
   const previousPhaseRef = useRef<typeof phase | null>(null);
   useEffect(() => {
@@ -138,7 +165,10 @@ export default function SessionRoomPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 pb-52 pt-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:pb-0">
+    <div
+      className="flex flex-col gap-4 pb-52 pt-2 lg:min-h-0 lg:flex-1 lg:overflow-hidden lg:pb-0"
+      style={{ paddingBottom: mobileBottomBarHeight ?? undefined }}
+    >
       {/* 상단 행 — 홈 링크 + mute 토글 */}
       <div className="flex items-center justify-between lg:shrink-0">
         <Link
@@ -372,10 +402,26 @@ export default function SessionRoomPage() {
               : undefined
           }
         />
+        {phase === 'steering' && currentChunk && (
+          <section
+            aria-label="다음 방향 고르기"
+            className="mt-4 flex flex-col gap-3 rounded-2xl border border-border bg-surface/60 p-4"
+          >
+            <h2 className="text-sm font-semibold text-text">다음 방향</h2>
+            <NextDirections
+              topics={currentChunk.nextTopics}
+              onChoose={actions.chooseTopic}
+              onConclude={actions.conclude}
+            />
+          </section>
+        )}
       </div>
 
       {/* 모바일 하단 고정 — 컨트롤 + 챗 입력바 */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
+      <div
+        ref={mobileBottomBarRef}
+        className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
+      >
         <div className="mx-auto flex max-w-2xl flex-col gap-2">
           <DebateControls
             embedded
